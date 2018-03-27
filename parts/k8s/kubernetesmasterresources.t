@@ -608,7 +608,8 @@
         "creationSource" : "[concat(variables('generatorCode'), '-', variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",
         "resourceNameSuffix" : "[variables('nameSuffix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
-        "poolName" : "master"
+        "poolName" : "master",
+        "ManualSpin": "true"
       },
       "location": "[variables('location')]",
       "name": "[concat(variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",
