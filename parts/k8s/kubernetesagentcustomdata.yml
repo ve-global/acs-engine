@@ -34,7 +34,8 @@ write_files:
       "log-opts":  {
          "max-size": "50m",
          "max-file": "5"
-      }
+      },
+      "dns-search": [ "ve-ci.com" ]
     }
 
 - path: "/etc/kubernetes/certs/ca.crt"
@@ -177,6 +178,8 @@ runcmd:
 - echo `date`,`hostname`, startruncmd>>/opt/m
 # the first arg is the number of retries, the second arg is the wait duration between two retries and the rest of the args are the cmd to run
 - set -x
+- sudo echo "  dns-search ve-ci.com" >> /etc/network/interfaces.d/50-cloud-init.cfg
+- systemctl restart networking
 - . /opt/azure/containers/provision_source.sh
 - retrycmd_if_failure 20 5 5 apt-mark hold walinuxagent{{GetKubernetesAgentPreprovisionYaml .}}
 - echo `date`,`hostname`, preaptupdate>>/opt/m
