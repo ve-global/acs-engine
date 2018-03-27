@@ -343,6 +343,7 @@ Below is a list of apiserver options that are *not* currently user-configurable,
 |"--storage-backend"|*calculated value that represents etcd version*|
 |"--v"|"4"|
 |"--experimental-encryption-provider-config"|"/etc/kubernetes/encryption-config.yaml" (*if enableDataEncryptionAtRest is true*)|
+|"--experimental-encryption-provider-config"|"/etc/kubernetes/encryption-config.yaml" (*if enableDataEncryptionAtRestWithExternalKms is true*)|
 |"--requestheader-client-ca-file"|"/etc/kubernetes/certs/proxy-ca.crt" (*if enableAggregatedAPIs is true*)|
 |"--proxy-client-cert-file"|"/etc/kubernetes/certs/proxy.crt" (*if enableAggregatedAPIs is true*)|
 |"--proxy-client-key-file"|"/etc/kubernetes/certs/proxy.key" (*if enableAggregatedAPIs is true*)|
