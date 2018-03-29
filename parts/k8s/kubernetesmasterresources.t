@@ -601,7 +601,7 @@
          "accessPolicies": [
            {
              "tenantId": "[variables('tenantID')]",
-             "objectId": "[variables('servicePrincipalClientId')]",
+             "objectId": "[variables('servicePrincipalObjectId')]",
              "permissions": {
                "keys": ["create", "encrypt", "decrypt", "get", "list"]
              }

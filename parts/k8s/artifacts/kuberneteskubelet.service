@@ -17,6 +17,15 @@ ExecStartPre=/bin/mount --make-shared /var/lib/kubelet
 ExecStartPre=/sbin/sysctl -w net.ipv4.tcp_retries2=8
 ExecStartPre=-/sbin/ebtables -t nat --list
 ExecStartPre=-/sbin/iptables -t nat --list
+ExecStartPre=/bin/bash -c 'if [ ! -e /tmp/azurekms.socket ]; then \
+  /usr/bin/docker run \
+  -d \
+  --rm \
+  -v /tmp:/tmp \
+  -v /etc/kubernetes:/etc/kubernetes \
+  -v '/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt' \
+  --name=azurekmsk8s \
+  ritazh/k8s-azure-kms:latest ; fi'
 ExecStart=/usr/bin/docker run \
   --net=host \
   --pid=host \
@@ -45,6 +54,8 @@ ExecStart=/usr/bin/docker run \
         --volume-plugin-dir=/etc/kubernetes/volumeplugins \
         $KUBELET_CONFIG $KUBELET_OPTS \
         ${KUBELET_REGISTER_NODE} ${KUBELET_REGISTER_WITH_TAINTS}
+ExecStopPost=/bin/bash -c "if [ -e /tmp/azurekms.socket ]; then \
+  /usr/bin/docker stop azurekmsk8s ; fi"
 
 [Install]
 WantedBy=multi-user.target
