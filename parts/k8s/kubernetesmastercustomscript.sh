@@ -357,6 +357,13 @@ function ensureDocker() {
         fi
     fi
 }
+function ensureKMS() {
+    systemctlEnableAndCheck kms
+    # only start if a reboot is not required
+    if ! $REBOOTREQUIRED; then
+        systemctl restart kms
+    fi
+}
 
 function ensureKubelet() {
     retrycmd_if_failure 100 1 60 docker pull $HYPERKUBE_URL

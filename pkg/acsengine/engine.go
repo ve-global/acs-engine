@@ -1119,7 +1119,7 @@ func (t *TemplateGenerator) getTemplateFuncMap(cs *api.ContainerService) templat
 
 			// add artifacts
 			str = substituteConfigString(str,
-				kubernetesArtifactSettingsInit(profile),
+				kubernetesArtifactSettingsInitMaster(profile),
 				"k8s/artifacts",
 				"/etc/systemd/system",
 				"MASTER_ARTIFACTS_CONFIG_PLACEHOLDER",
@@ -1145,7 +1145,7 @@ func (t *TemplateGenerator) getTemplateFuncMap(cs *api.ContainerService) templat
 
 			// add artifacts
 			str = substituteConfigString(str,
-				kubernetesArtifactSettingsInit(cs.Properties),
+				kubernetesArtifactSettingsInitAgent(cs.Properties),
 				"k8s/artifacts",
 				"/etc/systemd/system",
 				"AGENT_ARTIFACTS_CONFIG_PLACEHOLDER",
