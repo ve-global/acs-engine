@@ -162,7 +162,7 @@ cat << EOF > "${AZURE_JSON_PATH}"
     "useManagedIdentityExtension": ${USE_MANAGED_IDENTITY_EXTENSION},
     "useInstanceMetadata": ${USE_INSTANCE_METADATA},
     "providerVaultName": "${KMS_PROVIDER_VAULT_NAME}",
-    "providerKeyName": "t1",
+    "providerKeyName": "k8s",
     "providerKeyVersion": ""
 }
 EOF
@@ -578,6 +578,12 @@ echo `date`,`hostname`, setMaxPodsStart>>/opt/m
 setMaxPods ${MAX_PODS}
 echo `date`,`hostname`, ensureContainerdStart>>/opt/m
 ensureContainerd
+echo `date`,`hostname`, ensureCRIOStart>>/opt/m
+ensureCRIO
+if [[ ! -z "${MASTER_NODE}" ]]; then
+    echo `date`,`hostname`, ensureKMSStart>>/opt/m
+    ensureKMS
+fi
 echo `date`,`hostname`, ensureKubeletStart>>/opt/m
 ensureKubelet
 echo `date`,`hostname`, extractKubctlStart>>/opt/m

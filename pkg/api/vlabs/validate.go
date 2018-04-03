@@ -111,15 +111,6 @@ func (o *OrchestratorProfile) Validate(isUpdate bool) error {
 							"1.7.0", o.OrchestratorVersion)
 					}
 				}
-
-				// if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableDataEncryptionAtRestWithExternalKms) {
-				// 	sv, _ := semver.NewVersion(o.OrchestratorVersion)
-				// 	cons, _ := semver.NewConstraint("<" + "1.9.0")
-				// 	if cons.Check(sv) {
-				// 		return fmt.Errorf("enableDataEncryptionAtRestWithExternalKms is only available in Kubernetes version %s or greater; unable to validate for Kubernetes version %s",
-				// 			"1.10.0", o.OrchestratorVersion)
-				// 	}
-				// }
 				
 				if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnablePodSecurityPolicy) {
 					if !helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableRbac) {
