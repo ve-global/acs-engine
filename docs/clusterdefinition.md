@@ -484,6 +484,7 @@ https://{keyvaultname}.vault.azure.net:443/secrets/{secretName}/{version}
 |---|---|---|
 |clientId|yes, for Kubernetes clusters|describes the Azure client id.  It is recommended to use a separate client ID per cluster|
 |secret|yes, for Kubernetes clusters|describes the Azure client secret.  It is recommended to use a separate client secret per client id|
+|objectId|optional, for Kubernetes clusters|describes the Azure service principal object id.  It is required if enableDataEncryptionAtRestWithExternalKms is true|
 
 ## Cluster Defintions for apiVersion "2016-03-30"
 
