@@ -34,8 +34,7 @@ write_files:
       "log-opts":  {
          "max-size": "50m",
          "max-file": "5"
-      },
-      "dns-search": [ "ve-ci.com" ]
+      }
     }
 
 - path: "/etc/kubernetes/certs/ca.crt"
@@ -178,13 +177,19 @@ runcmd:
 - echo `date`,`hostname`, startruncmd>>/opt/m
 # the first arg is the number of retries, the second arg is the wait duration between two retries and the rest of the args are the cmd to run
 - set -x
-- sudo echo "  dns-search ve-ci.com" >> /etc/network/interfaces.d/50-cloud-init.cfg
-- systemctl restart networking
 - . /opt/azure/containers/provision_source.sh
 - retrycmd_if_failure 20 5 5 apt-mark hold walinuxagent{{GetKubernetesAgentPreprovisionYaml .}}
 - echo `date`,`hostname`, preaptupdate>>/opt/m
 - apt_get_update
 - echo `date`,`hostname`, postaptupdate>>/opt/m
+{{if HasCustomSearchDomain}}
+- sudo echo "  dns-search {{WrapAsVariable "searchDomainName"}}" >> /etc/network/interfaces.d/50-cloud-init.cfg
+- systemctl restart networking
+- retrycmd_if_failure 5 5 120 apt-get -y install realmd sssd sssd-tools samba-common samba samba-common python2.7 samba-libs packagekit
+- echo "{{WrapAsVariable "searchDomainRealmPassword"}}" | realm join -U {{WrapAsVariable "searchDomainRealmUser"}}@`echo "{{WrapAsVariable "searchDomainName"}}" | tr /a-z/ /A-Z/` `echo "{{WrapAsVariable "searchDomainName"}}" | tr /a-z/ /A-Z/`
+- echo "ad_hostname = `hostname`.{{WrapAsVariable "searchDomainName"}}" >> /etc/sssd/sssd.conf
+- systemctl restart sssd
+{{end}}
 - retrycmd_if_failure 5 10 120 apt-get install -y apt-transport-https ca-certificates nfs-common iptables iproute2 socat util-linux mount ebtables ethtool init-system-helpers
 - echo `date`,`hostname`, aptinstall>>/opt/m
 - systemctl enable rpcbind
