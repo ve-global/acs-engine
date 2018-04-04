@@ -41,7 +41,7 @@ Here are the valid values for the orchestrator types:
 |enableRbac|no|Enable [Kubernetes RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) (boolean - default == true) |
 |enableAggregatedAPIs|no|Enable [Kubernetes Aggregated APIs](https://kubernetes.io/docs/concepts/api-extension/apiserver-aggregation/).This is required by [Service Catalog](https://github.com/kubernetes-incubator/service-catalog/blob/master/README.md). (boolean - default == false) |
 |enableDataEncryptionAtRest|no|Enable [kuberetes data encryption at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).This is currently an alpha feature. (boolean - default == false) |
-|enableDataEncryptionAtRestWithExternalKms|no|Enable [kuberetes data encryption at rest with external KMS](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).This is currently an alpha feature. (boolean - default == false) |
+|enableEncryptionWithExternalKms|no|Enable [kuberetes data encryption at rest with external KMS](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).This is currently an alpha feature. (boolean - default == false) |
 |etcdDiskSizeGB|no|Size in GB to assign to etcd data volume. Defaults (if no user value provided) are: 256 GB for clusters up to 3 nodes; 512 GB for clusters with between 4 and 10 nodes; 1024 GB for clusters with between 11 and 20 nodes; and 2048 GB for clusters with more than 20 nodes|
 |privateCluster|no|Build a cluster without public addresses assigned. See `privateClusters` [below](#feat-private-cluster).|
 |maxPods|no|The maximum number of pods per node. The minimum valid value, necessary for running kube-system pods, is 5. Default value is 30 when networkPolicy equals azure, 110 otherwise.|
@@ -344,7 +344,7 @@ Below is a list of apiserver options that are *not* currently user-configurable,
 |"--storage-backend"|*calculated value that represents etcd version*|
 |"--v"|"4"|
 |"--experimental-encryption-provider-config"|"/etc/kubernetes/encryption-config.yaml" (*if enableDataEncryptionAtRest is true*)|
-|"--experimental-encryption-provider-config"|"/etc/kubernetes/encryption-config.yaml" (*if enableDataEncryptionAtRestWithExternalKms is true*)|
+|"--experimental-encryption-provider-config"|"/etc/kubernetes/encryption-config.yaml" (*if enableEncryptionWithExternalKms is true*)|
 |"--requestheader-client-ca-file"|"/etc/kubernetes/certs/proxy-ca.crt" (*if enableAggregatedAPIs is true*)|
 |"--proxy-client-cert-file"|"/etc/kubernetes/certs/proxy.crt" (*if enableAggregatedAPIs is true*)|
 |"--proxy-client-key-file"|"/etc/kubernetes/certs/proxy.key" (*if enableAggregatedAPIs is true*)|
@@ -484,7 +484,7 @@ https://{keyvaultname}.vault.azure.net:443/secrets/{secretName}/{version}
 |---|---|---|
 |clientId|yes, for Kubernetes clusters|describes the Azure client id.  It is recommended to use a separate client ID per cluster|
 |secret|yes, for Kubernetes clusters|describes the Azure client secret.  It is recommended to use a separate client secret per client id|
-|objectId|optional, for Kubernetes clusters|describes the Azure service principal object id.  It is required if enableDataEncryptionAtRestWithExternalKms is true|
+|objectId|optional, for Kubernetes clusters|describes the Azure service principal object id.  It is required if enableEncryptionWithExternalKms is true|
 
 ## Cluster Defintions for apiVersion "2016-03-30"
 
