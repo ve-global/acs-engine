@@ -454,6 +454,11 @@ func getParameters(cs *api.ContainerService, isClassicMode bool, generatorCode s
 	addValue(parametersMap, "fqdnEndpointSuffix", cloudSpecConfig.EndpointConfig.ResourceManagerVMDNSSuffix)
 	addValue(parametersMap, "targetEnvironment", GetCloudTargetEnv(location))
 	addValue(parametersMap, "linuxAdminUsername", properties.LinuxProfile.AdminUsername)
+	if properties.LinuxProfile.CustomSearchDomain != nil {
+		addValue(parametersMap, "sdName", properties.LinuxProfile.CustomSearchDomain.Name)
+		addValue(parametersMap, "sdRealmUser", properties.LinuxProfile.CustomSearchDomain.RealmUser)
+		addValue(parametersMap, "sdRealmPassword", properties.LinuxProfile.CustomSearchDomain.RealmPassword)
+	}
 	// masterEndpointDNSNamePrefix is the basis for storage account creation across dcos, swarm, and k8s
 	if properties.MasterProfile != nil {
 		// MasterProfile exists, uses master DNS prefix
@@ -1292,6 +1297,9 @@ func (t *TemplateGenerator) getTemplateFuncMap(cs *api.ContainerService) templat
 		},
 		"HasLinuxSecrets": func() bool {
 			return cs.Properties.LinuxProfile.HasSecrets()
+		},
+		"HasCustomSearchDomain": func() bool {
+			return cs.Properties.LinuxProfile.HasSearchDomain()
 		},
 		"HasWindowsSecrets": func() bool {
 			return cs.Properties.WindowsProfile.HasSecrets()
