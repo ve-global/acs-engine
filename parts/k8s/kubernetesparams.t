@@ -733,3 +733,21 @@
       "type": "string"
     }
 {{end}}
+{{if EnableEncryptionWithExternalKms}}
+   ,"servicePrincipalObjectId": {
+      "metadata": {
+        "description": "Object ID (used by cloudprovider)"
+      },
+      "type": "securestring"
+    },"clusterKeyVaultSku": {
+       "type": "string",
+       "defaultValue": "Standard",
+       "allowedValues": [
+         "Standard",
+         "Premium"
+       ],
+       "metadata": {
+         "description": "SKU for the key vault used by the cluster"
+       }
+     }
+ {{end}}

@@ -160,7 +160,10 @@ cat << EOF > "${AZURE_JSON_PATH}"
     "cloudProviderRateLimitQPS": ${CLOUDPROVIDER_RATELIMIT_QPS},
     "cloudProviderRateLimitBucket": ${CLOUDPROVIDER_RATELIMIT_BUCKET},
     "useManagedIdentityExtension": ${USE_MANAGED_IDENTITY_EXTENSION},
-    "useInstanceMetadata": ${USE_INSTANCE_METADATA}
+    "useInstanceMetadata": ${USE_INSTANCE_METADATA},
+    "providerVaultName": "${KMS_PROVIDER_VAULT_NAME}",
+    "providerKeyName": "k8s",
+    "providerKeyVersion": ""
 }
 EOF
 
@@ -352,6 +355,13 @@ function ensureDocker() {
             echo "docker did not start"
             exit 2
         fi
+    fi
+}
+function ensureKMS() {
+    systemctlEnableAndCheck kms
+    # only start if a reboot is not required
+    if ! $REBOOTREQUIRED; then
+        systemctl restart kms
     fi
 }
 
@@ -568,6 +578,12 @@ echo `date`,`hostname`, setMaxPodsStart>>/opt/m
 setMaxPods ${MAX_PODS}
 echo `date`,`hostname`, ensureContainerdStart>>/opt/m
 ensureContainerd
+echo `date`,`hostname`, ensureCRIOStart>>/opt/m
+ensureCRIO
+if [[ ! -z "${MASTER_NODE}" ]]; then
+    echo `date`,`hostname`, ensureKMSStart>>/opt/m
+    ensureKMS
+fi
 echo `date`,`hostname`, ensureKubeletStart>>/opt/m
 ensureKubelet
 echo `date`,`hostname`, extractKubctlStart>>/opt/m
