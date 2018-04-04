@@ -227,6 +227,11 @@
 {{else}}
     "allocateNodeCidrs": true,
 {{end}}
+{{if HasCustomSearchDomain}}
+    "sdName": "[parameters('sdName')]",
+    "sdRealmUser": "[parameters('sdRealmUser')]",
+    "sdRealmPassword": "[parameters('sdRealmPassword')]",
+{{end}}
 {{if not IsHostedMaster}}
   {{if .MasterProfile.IsCustomVNET}}
     "vnetSubnetID": "[parameters('masterVnetSubnetID')]",
