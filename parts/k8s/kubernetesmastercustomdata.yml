@@ -44,8 +44,7 @@ write_files:
       "log-opts":  {
          "max-size": "50m",
          "max-file": "5"
-      },
-      "dns-search": [ "ve-ci.com" ]
+      }
     }
 
 - path: "/etc/kubernetes/certs/ca.crt"
@@ -369,8 +368,6 @@ coreos:
 runcmd:
 # the first arg is the number of retries, the second arg is the wait duration between two retries and the rest of the args are the cmd to run
 - set -x
-- sudo echo "  dns-search ve-ci.com" >> /etc/network/interfaces.d/50-cloud-init.cfg
-- systemctl restart networking
 - . /opt/azure/containers/provision_source.sh
 - wait_for_file 1800 1 /opt/azure/containers/certs.ready
 - /opt/azure/containers/setup-etcd.sh > /opt/azure/containers/setup-etcd.log 2>&1
