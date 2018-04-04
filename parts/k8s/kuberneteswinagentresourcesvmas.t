@@ -133,7 +133,8 @@
         "creationSource" : "[concat(variables('generatorCode'), '-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
         "resourceNameSuffix" : "[variables('winResourceNamePrefix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
-        "poolName" : "{{.Name}}"
+        "poolName" : "{{.Name}}",
+        "ManualSpin" : "true"
       },
       "location": "[variables('location')]",
       "name": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
