@@ -143,9 +143,9 @@
         "resourceNameSuffix" : "[variables('nameSuffix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
         "poolName" : "{{.Name}}"
-        {{if .hasVMTags}}
+        {{if .HasVMTags}}
         {{range $key, $value := .VMTags}}
-        ,"{{key}}" = "{{value}}"
+        ,"{{$key}}": "{{$value}}"
         {{end}}
         {{end}}
       },

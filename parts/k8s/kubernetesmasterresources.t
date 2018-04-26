@@ -849,9 +849,9 @@
         "resourceNameSuffix" : "[variables('nameSuffix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
         "poolName" : "master"
-        {{if .MasterProfile.hasVMTags}}
+        {{if .MasterProfile.HasVMTags}}
         {{range $key, $value := .MasterProfile.VMTags}}
-        ,"{{key}}" = "{{value}}"
+        ,"{{$key}}": "{{$value}}"
         {{end}}
         {{end}}
       },

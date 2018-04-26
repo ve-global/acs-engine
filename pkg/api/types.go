@@ -661,8 +661,8 @@ func (m *MasterProfile) IsCoreOS() bool {
 	return m.Distro == CoreOS
 }
 
-// hasVMTags returns true if there is any additional VMTag
-func (m *MasterProfile) hasVMTags() bool {
+// HasVMTags returns true if there is any additional VMTag
+func (m *MasterProfile) HasVMTags() bool {
 	return len(m.VMTags) > 0
 }
 
@@ -716,8 +716,8 @@ func (a *AgentPoolProfile) HasDisks() bool {
 	return len(a.DiskSizesGB) > 0
 }
 
-// hasVMTags returns true if there is any additional VMTag
-func (a *AgentPoolProfile) hasVMTags() bool {
+// HasVMTags returns true if there is any additional VMTag
+func (a *AgentPoolProfile) HasVMTags() bool {
 	return len(a.VMTags) > 0
 }
 

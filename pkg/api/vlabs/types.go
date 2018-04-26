@@ -504,6 +504,11 @@ func (m *MasterProfile) IsCoreOS() bool {
 	return m.Distro == CoreOS
 }
 
+// HasVMTags returns true if there is any additional VMTag
+func (m *MasterProfile) HasVMTags() bool {
+	return len(m.VMTags) > 0
+}
+
 // IsCustomVNET returns true if the customer brought their own VNET
 func (a *AgentPoolProfile) IsCustomVNET() bool {
 	return len(a.VnetSubnetID) > 0
@@ -562,6 +567,11 @@ func (a *AgentPoolProfile) GetSubnet() string {
 // SetSubnet sets the read-only subnet for the agent pool
 func (a *AgentPoolProfile) SetSubnet(subnet string) {
 	a.subnet = subnet
+}
+
+// HasVMTags returns true if there is any additional VMTag
+func (a *AgentPoolProfile) HasVMTags() bool {
+	return len(a.VMTags) > 0
 }
 
 // IsSwarmMode returns true if this template is for Swarm Mode orchestrator
