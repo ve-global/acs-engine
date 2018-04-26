@@ -103,4 +103,4 @@
       },
       "type": "string"
     }
-  {{end}}
+{{end}}

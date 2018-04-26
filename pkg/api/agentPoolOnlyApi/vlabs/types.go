@@ -138,6 +138,7 @@ type AgentPoolProfile struct {
 
 	// subnet is internal
 	subnet string
+	VMTags map[string]string `json:"vmtags,omitempty"`
 }
 
 // AccessProfile represents role name and kubeconfig
@@ -225,4 +226,9 @@ func (a *AgentPoolProfile) IsManagedDisks() bool {
 // IsStorageAccount returns true if the customer specified storage account
 func (a *AgentPoolProfile) IsStorageAccount() bool {
 	return a.StorageProfile == StorageAccount
+}
+
+// HasVMTags returns true if there is any additional VMTag
+func (a *AgentPoolProfile) HasVMTags() bool {
+	return len(a.VMTags) > 0
 }

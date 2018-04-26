@@ -124,13 +124,21 @@ type LinuxProfile struct {
 	SSH           struct {
 		PublicKeys []PublicKey `json:"publicKeys" validate:"required,len=1"`
 	} `json:"ssh" validate:"required"`
-	Secrets       []KeyVaultSecrets `json:"secrets,omitempty"`
-	ScriptRootURL string            `json:"scriptroot,omitempty"`
+	Secrets            []KeyVaultSecrets   `json:"secrets,omitempty"`
+	ScriptRootURL      string              `json:"scriptroot,omitempty"`
+	CustomSearchDomain *CustomSearchDomain `json:"customSearchDomain,omitempty"`
 }
 
 // PublicKey represents an SSH key for LinuxProfile
 type PublicKey struct {
 	KeyData string `json:"keyData"`
+}
+
+// CustomSearchDomain represents the Search Domain when the custom vnet has a windows server DNS as a nameserver.
+type CustomSearchDomain struct {
+	Name          string `json:"name,omitempty"`
+	RealmUser     string `json:"realmUser,omitempty"`
+	RealmPassword string `json:"realmPassword,omitempty"`
 }
 
 // WindowsProfile represents the windows parameters passed to the cluster
@@ -350,7 +358,8 @@ type MasterProfile struct {
 	// Master LB public endpoint/FQDN with port
 	// The format will be FQDN:2376
 	// Not used during PUT, returned as part of GET
-	FQDN string `json:"fqdn,omitempty"`
+	FQDN   string            `json:"fqdn,omitempty"`
+	VMTags map[string]string `json:"vmtags,omitempty"`
 }
 
 // ImageReference represents a reference to an Image resource in Azure.
@@ -407,6 +416,7 @@ type AgentPoolProfile struct {
 	CustomNodeLabels      map[string]string `json:"customNodeLabels,omitempty"`
 	PreProvisionExtension *Extension        `json:"preProvisionExtension"`
 	Extensions            []Extension       `json:"extensions"`
+	VMTags                map[string]string `json:"vmtags,omitempty"`
 }
 
 // AgentPoolProfileRole represents an agent role
@@ -502,6 +512,11 @@ func (m *MasterProfile) IsCoreOS() bool {
 	return m.Distro == CoreOS
 }
 
+// HasVMTags returns true if there is any additional VMTag
+func (m *MasterProfile) HasVMTags() bool {
+	return len(m.VMTags) > 0
+}
+
 // IsCustomVNET returns true if the customer brought their own VNET
 func (a *AgentPoolProfile) IsCustomVNET() bool {
 	return len(a.VnetSubnetID) > 0
@@ -560,6 +575,16 @@ func (a *AgentPoolProfile) GetSubnet() string {
 // SetSubnet sets the read-only subnet for the agent pool
 func (a *AgentPoolProfile) SetSubnet(subnet string) {
 	a.subnet = subnet
+}
+
+// HasVMTags returns true if there is any additional VMTag
+func (a *AgentPoolProfile) HasVMTags() bool {
+	return len(a.VMTags) > 0
+}
+
+// HasSearchDomain returns true if the customer specified secrets to install
+func (l *LinuxProfile) HasSearchDomain() bool {
+	return l.CustomSearchDomain != nil
 }
 
 // IsSwarmMode returns true if this template is for Swarm Mode orchestrator

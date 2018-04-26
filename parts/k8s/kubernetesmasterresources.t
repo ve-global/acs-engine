@@ -849,6 +849,11 @@
         "resourceNameSuffix" : "[variables('nameSuffix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
         "poolName" : "master"
+        {{if .MasterProfile.HasVMTags}}
+        {{range $key, $value := .MasterProfile.VMTags}}
+        ,"{{$key}}": "{{$value}}"
+        {{end}}
+        {{end}}
       },
       "location": "[variables('location')]",
       "name": "[concat(variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",

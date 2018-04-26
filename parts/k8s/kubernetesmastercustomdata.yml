@@ -403,6 +403,14 @@ runcmd:
 - sudo etcdctl member update ${MEMBER} {{WrapAsVerbatim "variables('masterEtcdPeerURLs')[copyIndex(variables('masterOffset'))]"}}
 - retrycmd_if_failure 5 5 10 curl --cacert /etc/kubernetes/certs/ca.crt --cert /etc/kubernetes/certs/etcdclient.crt --key /etc/kubernetes/certs/etcdclient.key --retry 5 --retry-delay 10 --retry-max-time 10 --max-time 60 "{{WrapAsVerbatim "variables('masterEtcdClientURLs')[copyIndex(variables('masterOffset'))]"}}"/v2/machines
 - apt_get_update
+{{if HasCustomSearchDomain}}
+- sudo echo "  dns-search {{WrapAsVariable "searchDomainName"}}" >> /etc/network/interfaces.d/50-cloud-init.cfg
+- systemctl restart networking
+- retrycmd_if_failure 5 5 120 apt-get -y install realmd sssd sssd-tools samba-common samba samba-common python2.7 samba-libs packagekit
+- echo "{{WrapAsVariable "searchDomainRealmPassword"}}" | realm join -U {{WrapAsVariable "searchDomainRealmUser"}}@`echo "{{WrapAsVariable "searchDomainName"}}" | tr /a-z/ /A-Z/` `echo "{{WrapAsVariable "searchDomainName"}}" | tr /a-z/ /A-Z/`
+- echo "ad_hostname = `hostname`.{{WrapAsVariable "searchDomainName"}}" >> /etc/sssd/sssd.conf
+- systemctl restart sssd
+{{end}}
 - retrycmd_if_failure 5 10 120 apt-get install -y apt-transport-https ca-certificates iptables iproute2 socat util-linux mount ebtables ethtool init-system-helpers
 - retrycmd_if_failure_no_stats 180 1 5 curl -fsSL https://aptdocker.azureedge.net/gpg > /tmp/aptdocker.gpg
 - cat /tmp/aptdocker.gpg | apt-key add -

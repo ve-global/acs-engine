@@ -484,6 +484,12 @@ func convertVLabsLinuxProfile(vlabs *vlabs.LinuxProfile, api *LinuxProfile) {
 		api.Secrets = append(api.Secrets, *secret)
 	}
 	api.ScriptRootURL = vlabs.ScriptRootURL
+	if vlabs.CustomSearchDomain != nil {
+		api.CustomSearchDomain = &CustomSearchDomain{}
+		api.CustomSearchDomain.Name = vlabs.CustomSearchDomain.Name
+		api.CustomSearchDomain.RealmUser = vlabs.CustomSearchDomain.RealmUser
+		api.CustomSearchDomain.RealmPassword = vlabs.CustomSearchDomain.RealmPassword
+	}
 }
 
 func convertV20160930WindowsProfile(v20160930 *v20160930.WindowsProfile, api *WindowsProfile) {
@@ -864,6 +870,10 @@ func convertVLabsMasterProfile(vlabs *vlabs.MasterProfile, api *MasterProfile) {
 		api.KubernetesConfig = &KubernetesConfig{}
 		convertVLabsKubernetesConfig(vlabs.KubernetesConfig, api.KubernetesConfig)
 	}
+	api.VMTags = map[string]string{}
+	for k, v := range vlabs.VMTags {
+		api.VMTags[k] = v
+	}
 	if vlabs.ImageRef != nil {
 		api.ImageRef = &ImageReference{}
 		api.ImageRef.Name = vlabs.ImageRef.Name
@@ -970,6 +980,10 @@ func convertVLabsAgentPoolProfile(vlabs *vlabs.AgentPoolProfile, api *AgentPoolP
 	if vlabs.KubernetesConfig != nil {
 		api.KubernetesConfig = &KubernetesConfig{}
 		convertVLabsKubernetesConfig(vlabs.KubernetesConfig, api.KubernetesConfig)
+	}
+	api.VMTags = map[string]string{}
+	for k, v := range vlabs.VMTags {
+		api.VMTags[k] = v
 	}
 	if vlabs.ImageRef != nil {
 		api.ImageRef = &ImageReference{}
