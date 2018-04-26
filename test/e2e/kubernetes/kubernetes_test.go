@@ -265,7 +265,7 @@ var _ = Describe("Azure Container Cluster using the Kubernetes Orchestrator", fu
 				r := rand.New(rand.NewSource(time.Now().UnixNano()))
 				serviceName := "ingress-nginx"
 				deploymentName := fmt.Sprintf("ingress-nginx-%s-%v", cfg.Name, r.Intn(99999))
-				_, err := deployment.CreateLinuxDeploy("library/nginx:latest", deploymentName, "default", "--labels=app="+serviceName)
+				deploy, err := deployment.CreateLinuxDeploy("library/nginx:latest", deploymentName, "default", "--labels=app="+serviceName)
 				Expect(err).NotTo(HaveOccurred())
 
 				s, err := service.CreateServiceFromFile(filepath.Join(WorkloadDir, "ingress-nginx-ilb.yaml"), serviceName, "default")
@@ -284,11 +284,18 @@ var _ = Describe("Azure Container Cluster using the Kubernetes Orchestrator", fu
 				Expect(err).NotTo(HaveOccurred())
 				for i, curlPod := range curlPods {
 					if i < 1 {
-						pass, err := curlPod.ValidateCurlConnection(svc.Status.LoadBalancer.Ingress[0]["ip"], 5*time.Second, 5*time.Minute)
+						pass, err := curlPod.ValidateCurlConnection(svc.Status.LoadBalancer.Ingress[0]["ip"], 5*time.Second, cfg.Timeout)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(pass).To(BeTrue())
 					}
 				}
+				By("Cleaning up after ourselves")
+				err = curlDeploy.Delete()
+				Expect(err).NotTo(HaveOccurred())
+				err = deploy.Delete()
+				Expect(err).NotTo(HaveOccurred())
+				err = s.Delete()
+				Expect(err).NotTo(HaveOccurred())
 			} else {
 				Skip("No linux agent was provisioned for this Cluster Definition")
 			}
@@ -300,7 +307,7 @@ var _ = Describe("Azure Container Cluster using the Kubernetes Orchestrator", fu
 				// Inspired by http://blog.kubernetes.io/2016/07/autoscaling-in-kubernetes.html
 				r := rand.New(rand.NewSource(time.Now().UnixNano()))
 				phpApacheName := fmt.Sprintf("php-apache-%s-%v", cfg.Name, r.Intn(99999))
-				phpApacheDeploy, err := deployment.CreateLinuxDeploy("gcr.io/google_containers/hpa-example", phpApacheName, "default", "--requests=cpu=50m,memory=50M")
+				phpApacheDeploy, err := deployment.CreateLinuxDeploy("k8s-gcrio.azureedge.net/hpa-example", phpApacheName, "default", "--requests=cpu=50m,memory=50M")
 				if err != nil {
 					fmt.Println(err)
 				}
@@ -507,7 +514,7 @@ var _ = Describe("Azure Container Cluster using the Kubernetes Orchestrator", fu
 		// TODO stabilize this test
 		/*It("should be able to attach azure file", func() {
 			if eng.HasWindowsAgents() {
-				if eng.OrchestratorVersion1Dot8AndUp() {
+				if common.IsKubernetesVersionGe(eng.ClusterDefinition.ContainerService.Properties.OrchestratorProfile.OrchestratorVersion ,"1.8") {
 					storageclassName := "azurefile" // should be the same as in storageclass-azurefile.yaml
 					sc, err := storageclass.CreateStorageClassFromFile(filepath.Join(WorkloadDir, "storageclass-azurefile.yaml"), storageclassName)
 					Expect(err).NotTo(HaveOccurred())

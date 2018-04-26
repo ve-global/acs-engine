@@ -1,7 +1,12 @@
 package api
 
-import "github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20170831"
-import "github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20180331"
+import (
+	"strconv"
+
+	"github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20170831"
+	"github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20180331"
+	"github.com/Azure/acs-engine/pkg/helpers"
+)
 
 ///////////////////////////////////////////////////////////
 // The converter exposes functions to convert the top level
@@ -130,12 +135,24 @@ func convertResourcePurchasePlanToV20180331AgentPoolOnly(api *ResourcePurchasePl
 	v20180331.Publisher = api.Publisher
 }
 
+func convertKubernetesConfigToEnableRBACV20180331AgentPoolOnly(kc *KubernetesConfig) *bool {
+	if kc == nil {
+		return helpers.PointerToBool(false)
+	}
+	// We use KubernetesConfig.EnableRbac to convert to versioned api model
+	// The assumption here is KubernetesConfig.EnableSecureKubelet is set to be same
+	if kc != nil && kc.EnableRbac != nil && *kc.EnableRbac {
+		return helpers.PointerToBool(true)
+	}
+	return helpers.PointerToBool(false)
+}
+
 func convertPropertiesToV20180331AgentPoolOnly(api *Properties, p *v20180331.Properties) {
 	p.ProvisioningState = v20180331.ProvisioningState(api.ProvisioningState)
+
 	if api.OrchestratorProfile != nil {
-		if api.OrchestratorProfile.OrchestratorVersion != "" {
-			p.KubernetesVersion = api.OrchestratorProfile.OrchestratorVersion
-		}
+		p.EnableRBAC = convertKubernetesConfigToEnableRBACV20180331AgentPoolOnly(api.OrchestratorProfile.KubernetesConfig)
+		p.KubernetesVersion, p.NetworkProfile = convertOrchestratorProfileToV20180331AgentPoolOnly(api.OrchestratorProfile)
 	}
 	if api.HostedMasterProfile != nil {
 		p.DNSPrefix = api.HostedMasterProfile.DNSPrefix
@@ -165,6 +182,30 @@ func convertPropertiesToV20180331AgentPoolOnly(api *Properties, p *v20180331.Pro
 	}
 }
 
+func convertOrchestratorProfileToV20180331AgentPoolOnly(orchestratorProfile *OrchestratorProfile) (kubernetesVersion string, networkProfile *v20180331.NetworkProfile) {
+	if orchestratorProfile.OrchestratorVersion != "" {
+		kubernetesVersion = orchestratorProfile.OrchestratorVersion
+	}
+
+	if orchestratorProfile.KubernetesConfig != nil {
+		k := orchestratorProfile.KubernetesConfig
+		if k.NetworkPolicy != "" || k.ServiceCIDR != "" || k.DNSServiceIP != "" || k.DockerBridgeSubnet != "" {
+			networkProfile = &v20180331.NetworkProfile{}
+			// ACS-E uses "none" in the un-versioned model to represent kubenet.
+			if k.NetworkPolicy == "none" {
+				networkProfile.NetworkPlugin = v20180331.Kubenet
+			} else {
+				networkProfile.NetworkPlugin = v20180331.NetworkPlugin(k.NetworkPolicy)
+			}
+			networkProfile.ServiceCidr = k.ServiceCIDR
+			networkProfile.DNSServiceIP = k.DNSServiceIP
+			networkProfile.DockerBridgeCidr = k.DockerBridgeSubnet
+		}
+	}
+
+	return kubernetesVersion, networkProfile
+}
+
 func convertLinuxProfileToV20180331AgentPoolOnly(api *LinuxProfile, obj *v20180331.LinuxProfile) {
 	obj.AdminUsername = api.AdminUsername
 	obj.SSH.PublicKeys = []v20180331.PublicKey{}
@@ -189,6 +230,12 @@ func convertAgentPoolProfileToV20180331AgentPoolOnly(api *AgentPoolProfile, p *v
 	p.OSDiskSizeGB = api.OSDiskSizeGB
 	p.StorageProfile = api.StorageProfile
 	p.VnetSubnetID = api.VnetSubnetID
+	if api.KubernetesConfig != nil && api.KubernetesConfig.KubeletConfig != nil {
+		if maxPods, ok := api.KubernetesConfig.KubeletConfig["--max-pods"]; ok {
+			agentPoolMaxPods, _ := strconv.Atoi(maxPods)
+			p.MaxPods = &agentPoolMaxPods
+		}
+	}
 }
 
 func convertServicePrincipalProfileToV20180331AgentPoolOnly(api *ServicePrincipalProfile, v20180331 *v20180331.ServicePrincipalProfile) {

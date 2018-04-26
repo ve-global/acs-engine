@@ -161,6 +161,8 @@ func ConvertOrchestratorVersionProfileToVLabs(api *OrchestratorVersionProfile) *
 		vlabsProfile.OrchestratorType = vlabs.Swarm
 	case SwarmMode:
 		vlabsProfile.OrchestratorType = vlabs.SwarmMode
+	case OpenShift:
+		vlabsProfile.OrchestratorType = vlabs.OpenShift
 	}
 	vlabsProfile.OrchestratorVersion = api.OrchestratorVersion
 	vlabsProfile.Default = api.Default
@@ -472,6 +474,10 @@ func convertPropertiesToVLabs(api *Properties, vlabsProps *vlabs.Properties) {
 		vlabsProps.AADProfile = &vlabs.AADProfile{}
 		convertAADProfileToVLabs(api.AADProfile, vlabsProps.AADProfile)
 	}
+	if api.AzProfile != nil {
+		vlabsProps.AzProfile = &vlabs.AzProfile{}
+		convertAzProfileToVLabs(api.AzProfile, vlabsProps.AzProfile)
+	}
 }
 
 func convertLinuxProfileToV20160930(api *LinuxProfile, obj *v20160930.LinuxProfile) {
@@ -575,6 +581,9 @@ func convertWindowsProfileToVLabs(api *WindowsProfile, vlabsProfile *vlabs.Windo
 	vlabsProfile.AdminPassword = api.AdminPassword
 	vlabsProfile.ImageVersion = api.ImageVersion
 	vlabsProfile.WindowsImageSourceURL = api.WindowsImageSourceURL
+	vlabsProfile.WindowsPublisher = api.WindowsPublisher
+	vlabsProfile.WindowsOffer = api.WindowsOffer
+	vlabsProfile.WindowsSku = api.WindowsSku
 	vlabsProfile.Secrets = []vlabs.KeyVaultSecrets{}
 	for _, s := range api.Secrets {
 		secret := &vlabs.KeyVaultSecrets{}
@@ -633,15 +642,30 @@ func convertOrchestratorProfileToVLabs(api *OrchestratorProfile, o *vlabs.Orches
 		convertKubernetesConfigToVLabs(api.KubernetesConfig, o.KubernetesConfig)
 	}
 
+	if api.OpenShiftConfig != nil {
+		o.OpenShiftConfig = &vlabs.OpenShiftConfig{}
+		convertOpenShiftConfigToVLabs(api.OpenShiftConfig, o.OpenShiftConfig)
+	}
+
 	if api.DcosConfig != nil {
 		o.DcosConfig = &vlabs.DcosConfig{}
 		convertDcosConfigToVLabs(api.DcosConfig, o.DcosConfig)
 	}
 }
 
+func convertOpenShiftConfigToVLabs(api *OpenShiftConfig, vl *vlabs.OpenShiftConfig) {
+	vl.KubernetesConfig = &vlabs.KubernetesConfig{}
+	if api.KubernetesConfig != nil {
+		convertKubernetesConfigToVLabs(api.KubernetesConfig, vl.KubernetesConfig)
+	}
+	vl.ClusterUsername = api.ClusterUsername
+	vl.ClusterPassword = api.ClusterPassword
+}
+
 func convertDcosConfigToVLabs(api *DcosConfig, vlabs *vlabs.DcosConfig) {
 	vlabs.DcosBootstrapURL = api.DcosBootstrapURL
 	vlabs.DcosWindowsBootstrapURL = api.DcosWindowsBootstrapURL
+
 	if api.Registry != "" {
 		vlabs.Registry = api.Registry
 	}
@@ -653,6 +677,9 @@ func convertDcosConfigToVLabs(api *DcosConfig, vlabs *vlabs.DcosConfig) {
 	if api.RegistryPass != "" {
 		vlabs.RegistryPass = api.RegistryPass
 	}
+	vlabs.DcosRepositoryURL = api.DcosRepositoryURL
+	vlabs.DcosClusterPackageListID = api.DcosClusterPackageListID
+	vlabs.DcosProviderPackageID = api.DcosProviderPackageID
 }
 
 func convertKubernetesConfigToVLabs(api *KubernetesConfig, vlabs *vlabs.KubernetesConfig) {
@@ -681,6 +708,7 @@ func convertKubernetesConfigToVLabs(api *KubernetesConfig, vlabs *vlabs.Kubernet
 	vlabs.EnableSecureKubelet = api.EnableSecureKubelet
 	vlabs.EnableAggregatedAPIs = api.EnableAggregatedAPIs
 	vlabs.EnableDataEncryptionAtRest = api.EnableDataEncryptionAtRest
+	vlabs.EnableEncryptionWithExternalKms = api.EnableEncryptionWithExternalKms
 	vlabs.EnablePodSecurityPolicy = api.EnablePodSecurityPolicy
 	vlabs.GCHighThreshold = api.GCHighThreshold
 	vlabs.GCLowThreshold = api.GCLowThreshold
@@ -813,6 +841,7 @@ func convertMasterProfileToV20170701(api *MasterProfile, v20170701Profile *v2017
 func convertMasterProfileToVLabs(api *MasterProfile, vlabsProfile *vlabs.MasterProfile) {
 	vlabsProfile.Count = api.Count
 	vlabsProfile.DNSPrefix = api.DNSPrefix
+	vlabsProfile.SubjectAltNames = api.SubjectAltNames
 	vlabsProfile.VMSize = api.VMSize
 	vlabsProfile.OSDiskSizeGB = api.OSDiskSizeGB
 	vlabsProfile.VnetSubnetID = api.VnetSubnetID
@@ -836,6 +865,11 @@ func convertMasterProfileToVLabs(api *MasterProfile, vlabsProfile *vlabs.MasterP
 	if api.KubernetesConfig != nil {
 		vlabsProfile.KubernetesConfig = &vlabs.KubernetesConfig{}
 		convertKubernetesConfigToVLabs(api.KubernetesConfig, vlabsProfile.KubernetesConfig)
+	}
+	if api.ImageRef != nil {
+		vlabsProfile.ImageRef = &vlabs.ImageReference{}
+		vlabsProfile.ImageRef.Name = api.ImageRef.Name
+		vlabsProfile.ImageRef.ResourceGroup = api.ImageRef.ResourceGroup
 	}
 }
 
@@ -933,6 +967,11 @@ func convertAgentPoolProfileToVLabs(api *AgentPoolProfile, p *vlabs.AgentPoolPro
 		p.KubernetesConfig = &vlabs.KubernetesConfig{}
 		convertKubernetesConfigToVLabs(api.KubernetesConfig, p.KubernetesConfig)
 	}
+	if api.ImageRef != nil {
+		p.ImageRef = &vlabs.ImageReference{}
+		p.ImageRef.Name = api.ImageRef.Name
+		p.ImageRef.ResourceGroup = api.ImageRef.ResourceGroup
+	}
 }
 
 func convertDiagnosticsProfileToV20160930(api *DiagnosticsProfile, dp *v20160930.DiagnosticsProfile) {
@@ -1014,6 +1053,7 @@ func convertCustomProfileToV20170701(api *CustomProfile, v20170701 *v20170701.Cu
 func convertServicePrincipalProfileToV20170701(api *ServicePrincipalProfile, v *v20170701.ServicePrincipalProfile) {
 	v.ClientID = api.ClientID
 	v.Secret = api.Secret
+	v.ObjectID = api.ObjectID
 	if api.KeyvaultSecretRef != nil {
 		v.KeyvaultSecretRef = &v20170701.KeyvaultSecretRef{
 			VaultID:       api.KeyvaultSecretRef.VaultID,
@@ -1026,6 +1066,7 @@ func convertServicePrincipalProfileToV20170701(api *ServicePrincipalProfile, v *
 func convertServicePrincipalProfileToVLabs(api *ServicePrincipalProfile, v *vlabs.ServicePrincipalProfile) {
 	v.ClientID = api.ClientID
 	v.Secret = api.Secret
+	v.ObjectID = api.ObjectID
 	if api.KeyvaultSecretRef != nil {
 		v.KeyvaultSecretRef = &vlabs.KeyvaultSecretRef{
 			VaultID:       api.KeyvaultSecretRef.VaultID,
@@ -1057,4 +1098,11 @@ func convertAADProfileToVLabs(api *AADProfile, vlabs *vlabs.AADProfile) {
 	vlabs.ServerAppID = api.ServerAppID
 	vlabs.TenantID = api.TenantID
 	vlabs.AdminGroupID = api.AdminGroupID
+}
+
+func convertAzProfileToVLabs(api *AzProfile, vlabs *vlabs.AzProfile) {
+	vlabs.Location = api.Location
+	vlabs.ResourceGroup = api.ResourceGroup
+	vlabs.SubscriptionID = api.SubscriptionID
+	vlabs.TenantID = api.TenantID
 }

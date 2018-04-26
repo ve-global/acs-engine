@@ -11,6 +11,8 @@ import (
 	"github.com/Azure/acs-engine/pkg/api"
 	"github.com/Azure/acs-engine/pkg/api/common"
 	"github.com/Azure/acs-engine/pkg/helpers"
+	"github.com/Azure/acs-engine/pkg/openshift/certgen"
+	"github.com/Azure/acs-engine/pkg/openshift/filesystem"
 	"github.com/Masterminds/semver"
 )
 
@@ -43,8 +45,12 @@ var (
 	DefaultDCOSSpecConfig = DCOSSpecConfig{
 		DCOS188BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable", "5df43052907c021eeb5de145419a3da1898c58a5"),
 		DCOS190BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable", "58fd0833ce81b6244fc73bf65b5deb43217b0bd7"),
-		DCOS110BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable", "e38ab2aa282077c8eb7bf103c6fff7b0f08db1a4"),
+		DCOS198BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable/1.9.8", "f4ae0d20665fc68ee25282d6f78681b2773c6e10"),
+		DCOS110BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable/1.10.0", "4d92536e7381176206e71ee15b5ffe454439920c"),
+		DCOS111BootstrapDownloadURL:     fmt.Sprintf(AzureEdgeDCOSBootstrapDownloadURL, "stable/1.11.0", "a0654657903fb68dff60f6e522a7f241c1bfbf0f"),
 		DCOSWindowsBootstrapDownloadURL: "http://dcos-win.westus.cloudapp.azure.com/dcos-windows/stable/",
+		DcosRepositoryURL:               "https://dcosio.azureedge.net/dcos/stable/1.11.0",
+		DcosClusterPackageListID:        "248a66388bba1adbcb14a52fd3b7b424ab06fa76",
 	}
 
 	//DefaultDockerSpecConfig is the default Docker engine repo.
@@ -58,7 +64,7 @@ var (
 		ImageOffer:     "UbuntuServer",
 		ImageSku:       "16.04-LTS",
 		ImagePublisher: "Canonical",
-		ImageVersion:   "16.04.201803230",
+		ImageVersion:   "16.04.201804050",
 	}
 
 	//DefaultRHELOSImageConfig is the RHEL Linux distribution.
@@ -74,6 +80,22 @@ var (
 		ImageOffer:     "CoreOS",
 		ImageSku:       "Stable",
 		ImagePublisher: "CoreOS",
+		ImageVersion:   "latest",
+	}
+
+	//DefaultOpenShift39RHELImageConfig is the OpenShift on RHEL distribution.
+	DefaultOpenShift39RHELImageConfig = AzureOSImageConfig{
+		ImageOffer:     "acsengine-preview",
+		ImageSku:       "rhel74",
+		ImagePublisher: "redhat",
+		ImageVersion:   "latest",
+	}
+
+	//DefaultOpenShift39CentOSImageConfig is the OpenShift on CentOS distribution.
+	DefaultOpenShift39CentOSImageConfig = AzureOSImageConfig{
+		ImageOffer:     "origin-acsengine-preview",
+		ImageSku:       "centos7",
+		ImagePublisher: "redhat",
 		ImageVersion:   "latest",
 	}
 
@@ -93,6 +115,9 @@ var (
 			api.Ubuntu: DefaultUbuntuImageConfig,
 			api.RHEL:   DefaultRHELOSImageConfig,
 			api.CoreOS: DefaultCoreOSImageConfig,
+			// Image config supported for OpenShift
+			api.OpenShift39RHEL: DefaultOpenShift39RHELImageConfig,
+			api.OpenShiftCentOS: DefaultOpenShift39CentOSImageConfig,
 		},
 	}
 
@@ -160,6 +185,7 @@ var (
 			DCOS188BootstrapDownloadURL:     fmt.Sprintf(AzureChinaCloudDCOSBootstrapDownloadURL, "5df43052907c021eeb5de145419a3da1898c58a5"),
 			DCOSWindowsBootstrapDownloadURL: "https://dcosdevstorage.blob.core.windows.net/dcos-windows",
 			DCOS190BootstrapDownloadURL:     fmt.Sprintf(AzureChinaCloudDCOSBootstrapDownloadURL, "58fd0833ce81b6244fc73bf65b5deb43217b0bd7"),
+			DCOS198BootstrapDownloadURL:     fmt.Sprintf(AzureChinaCloudDCOSBootstrapDownloadURL, "f4ae0d20665fc68ee25282d6f78681b2773c6e10"),
 		},
 
 		EndpointConfig: AzureEndpointConfig{
@@ -293,7 +319,9 @@ func setOrchestratorDefaults(cs *api.ContainerService) {
 	o.OrchestratorVersion = common.GetValidPatchVersion(
 		o.OrchestratorType,
 		o.OrchestratorVersion)
-	if o.OrchestratorType == api.Kubernetes {
+
+	switch o.OrchestratorType {
+	case api.Kubernetes:
 		k8sVersion := o.OrchestratorVersion
 
 		if o.KubernetesConfig == nil {
@@ -363,13 +391,6 @@ func setOrchestratorDefaults(cs *api.ContainerService) {
 				o.KubernetesConfig.ClusterSubnet = DefaultKubernetesSubnet
 			} else {
 				o.KubernetesConfig.ClusterSubnet = DefaultKubernetesClusterSubnet
-			}
-		}
-		if o.KubernetesConfig.MaxPods == 0 {
-			if o.IsAzureCNI() {
-				o.KubernetesConfig.MaxPods = DefaultKubernetesMaxPodsVNETIntegrated
-			} else {
-				o.KubernetesConfig.MaxPods = DefaultKubernetesMaxPods
 			}
 		}
 		if o.KubernetesConfig.GCHighThreshold == 0 {
@@ -493,12 +514,26 @@ func setOrchestratorDefaults(cs *api.ContainerService) {
 		// Configure scheduler
 		setSchedulerConfig(cs)
 
-	} else if o.OrchestratorType == api.DCOS {
+	case api.DCOS:
 		if o.DcosConfig == nil {
 			o.DcosConfig = &api.DcosConfig{}
 		}
 		if o.DcosConfig.DcosWindowsBootstrapURL == "" {
 			o.DcosConfig.DcosWindowsBootstrapURL = DefaultDCOSSpecConfig.DCOSWindowsBootstrapDownloadURL
+		}
+	case api.OpenShift:
+		if a.MasterProfile.Distro == "" {
+			a.MasterProfile.Distro = api.RHEL
+		}
+		kc := a.OrchestratorProfile.OpenShiftConfig.KubernetesConfig
+		if kc == nil {
+			kc = &api.KubernetesConfig{}
+		}
+		if kc.ContainerRuntime == "" {
+			kc.ContainerRuntime = DefaultContainerRuntime
+		}
+		if kc.NetworkPolicy == "" {
+			kc.NetworkPolicy = DefaultNetworkPolicy
 		}
 	}
 }
@@ -549,6 +584,11 @@ func setMasterNetworkDefaults(a *api.Properties, isUpgrade bool) {
 					a.MasterProfile.FirstConsecutiveStaticIP = DefaultFirstConsecutiveKubernetesStaticIP
 				}
 			}
+		} else if a.OrchestratorProfile.OrchestratorType == api.OpenShift {
+			a.MasterProfile.Subnet = DefaultOpenShiftMasterSubnet
+			if !isUpgrade || len(a.MasterProfile.FirstConsecutiveStaticIP) == 0 {
+				a.MasterProfile.FirstConsecutiveStaticIP = DefaultOpenShiftFirstConsecutiveStaticIP
+			}
 		} else if a.HasWindows() {
 			a.MasterProfile.Subnet = DefaultSwarmWindowsMasterSubnet
 			// FirstConsecutiveStaticIP is not reset if it is upgrade and some value already exists
@@ -572,7 +612,8 @@ func setMasterNetworkDefaults(a *api.Properties, isUpgrade bool) {
 		// Allocate IP addresses for pods if VNET integration is enabled.
 		if a.OrchestratorProfile.IsAzureCNI() {
 			if a.OrchestratorProfile.OrchestratorType == api.Kubernetes {
-				a.MasterProfile.IPAddressCount += a.OrchestratorProfile.KubernetesConfig.MaxPods
+				masterMaxPods, _ := strconv.Atoi(a.MasterProfile.KubernetesConfig.KubeletConfig["--max-pods"])
+				a.MasterProfile.IPAddressCount += masterMaxPods
 			}
 		}
 	}
@@ -588,7 +629,8 @@ func setAgentNetworkDefaults(a *api.Properties) {
 	if a.MasterProfile != nil && !a.MasterProfile.IsCustomVNET() {
 		subnetCounter := 0
 		for _, profile := range a.AgentPoolProfiles {
-			if a.OrchestratorProfile.OrchestratorType == api.Kubernetes {
+			if a.OrchestratorProfile.OrchestratorType == api.Kubernetes ||
+				a.OrchestratorProfile.OrchestratorType == api.OpenShift {
 				profile.Subnet = a.MasterProfile.Subnet
 			} else {
 				profile.Subnet = fmt.Sprintf(DefaultAgentSubnetTemplate, subnetCounter)
@@ -616,7 +658,8 @@ func setAgentNetworkDefaults(a *api.Properties) {
 			// Allocate IP addresses for pods if VNET integration is enabled.
 			if a.OrchestratorProfile.IsAzureCNI() {
 				if a.OrchestratorProfile.OrchestratorType == api.Kubernetes {
-					profile.IPAddressCount += a.OrchestratorProfile.KubernetesConfig.MaxPods
+					agentPoolMaxPods, _ := strconv.Atoi(profile.KubernetesConfig.KubeletConfig["--max-pods"])
+					profile.IPAddressCount += agentPoolMaxPods
 				}
 			}
 		}
@@ -638,7 +681,96 @@ func setStorageDefaults(a *api.Properties) {
 	}
 }
 
+func openShiftSetDefaultCerts(a *api.Properties) (bool, error) {
+	externalMasterHostname := fmt.Sprintf("%s.%s.cloudapp.azure.com", a.MasterProfile.DNSPrefix, a.AzProfile.Location)
+	routerLBHostname := fmt.Sprintf("%s-router.%s.cloudapp.azure.com", a.MasterProfile.DNSPrefix, a.AzProfile.Location)
+	c := certgen.Config{
+		Master: &certgen.Master{
+			Hostname: fmt.Sprintf("%s-master-%s-0", DefaultOpenshiftOrchestratorName, GenerateClusterID(a)),
+			IPs: []net.IP{
+				net.ParseIP(a.MasterProfile.FirstConsecutiveStaticIP),
+			},
+			Port: 8443,
+		},
+		ExternalMasterHostname: externalMasterHostname,
+		ClusterUsername:        a.OrchestratorProfile.OpenShiftConfig.ClusterUsername,
+		ClusterPassword:        a.OrchestratorProfile.OpenShiftConfig.ClusterPassword,
+		AzureConfig: certgen.AzureConfig{
+			TenantID:        a.AzProfile.TenantID,
+			SubscriptionID:  a.AzProfile.SubscriptionID,
+			AADClientID:     a.ServicePrincipalProfile.ClientID,
+			AADClientSecret: a.ServicePrincipalProfile.Secret,
+			ResourceGroup:   a.AzProfile.ResourceGroup,
+			Location:        a.AzProfile.Location,
+		},
+	}
+	a.OrchestratorProfile.OpenShiftConfig.ExternalMasterHostname = externalMasterHostname
+	a.OrchestratorProfile.OpenShiftConfig.RouterLBHostname = routerLBHostname
+
+	err := c.PrepareMasterCerts()
+	if err != nil {
+		return false, err
+	}
+	err = c.PrepareMasterKubeConfigs()
+	if err != nil {
+		return false, err
+	}
+	err = c.PrepareMasterFiles()
+	if err != nil {
+		return false, err
+	}
+
+	err = c.PrepareBootstrapKubeConfig()
+	if err != nil {
+		return false, err
+	}
+
+	if a.OrchestratorProfile.OpenShiftConfig.ConfigBundles == nil {
+		a.OrchestratorProfile.OpenShiftConfig.ConfigBundles = make(map[string][]byte)
+	}
+
+	masterBundle, err := getConfigBundle(c.WriteMaster)
+	if err != nil {
+		return false, err
+	}
+	a.OrchestratorProfile.OpenShiftConfig.ConfigBundles["master"] = masterBundle
+
+	nodeBundle, err := getConfigBundle(c.WriteNode)
+	if err != nil {
+		return false, err
+	}
+	a.OrchestratorProfile.OpenShiftConfig.ConfigBundles["bootstrap"] = nodeBundle
+
+	return true, nil
+}
+
+type writeFn func(filesystem.Filesystem) error
+
+func getConfigBundle(write writeFn) ([]byte, error) {
+	b := &bytes.Buffer{}
+
+	fs, err := filesystem.NewTGZFile(b)
+	if err != nil {
+		return nil, err
+	}
+
+	err = write(fs)
+	if err != nil {
+		return nil, err
+	}
+
+	err = fs.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
+}
+
 func setDefaultCerts(a *api.Properties) (bool, error) {
+	if a.MasterProfile != nil && a.OrchestratorProfile.OrchestratorType == api.OpenShift {
+		return openShiftSetDefaultCerts(a)
+	}
 
 	if a.MasterProfile == nil || a.OrchestratorProfile.OrchestratorType != api.Kubernetes {
 		return false, nil
@@ -650,7 +782,7 @@ func setDefaultCerts(a *api.Properties) (bool, error) {
 		return false, nil
 	}
 
-	masterExtraFQDNs := FormatAzureProdFQDNs(a.MasterProfile.DNSPrefix)
+	masterExtraFQDNs := append(FormatAzureProdFQDNs(a.MasterProfile.DNSPrefix), a.MasterProfile.SubjectAltNames...)
 	firstMasterIP := net.ParseIP(a.MasterProfile.FirstConsecutiveStaticIP).To4()
 
 	if firstMasterIP == nil {

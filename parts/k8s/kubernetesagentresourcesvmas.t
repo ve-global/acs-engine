@@ -31,6 +31,14 @@
               "subnet": {
                 "id": "[variables('{{$.Name}}VnetSubnetID')]"
               }
+{{if eq $.Role "infra"}}
+              ,
+              "loadBalancerBackendAddressPools": [
+                {
+                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'router-lb'), '/backendAddressPools/backend')]"
+                }
+              ]
+{{end}}
             }
           }
           {{if lt $seq $.IPAddressCount}},{{end}}
@@ -143,6 +151,13 @@
         "type": "systemAssigned"
       },
       {{end}}
+      {{if and IsOpenShift (not (UseAgentCustomImage .))}}
+      "plan": {
+        "name": "[variables('{{.Name}}osImageSKU')]",
+        "publisher": "[variables('{{.Name}}osImagePublisher')]",
+        "product": "[variables('{{.Name}}osImageOffer')]"
+      },
+      {{end}}
       "properties": {
         "availabilitySet": {
           "id": "[resourceId('Microsoft.Compute/availabilitySets',variables('{{.Name}}AvailabilitySet'))]"
@@ -160,7 +175,9 @@
         "osProfile": {
           "adminUsername": "[variables('username')]",
           "computername": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
+          {{if not IsOpenShift}}
           {{GetKubernetesAgentCustomData .}}
+          {{end}}
           "linuxConfiguration": {
               "disablePasswordAuthentication": "true",
               "ssh": {
@@ -178,12 +195,18 @@
             {{end}}
         },
         "storageProfile": {
+          {{if not (UseAgentCustomImage .)}}
           {{GetDataDisks .}}
+          {{end}}
           "imageReference": {
+            {{if UseAgentCustomImage .}}
+            "id": "[resourceId(variables('{{.Name}}osImageResourceGroup'), 'Microsoft.Compute/images', variables('{{.Name}}osImageName'))]"
+            {{else}}
             "offer": "[variables('{{.Name}}osImageOffer')]",
             "publisher": "[variables('{{.Name}}osImagePublisher')]",
             "sku": "[variables('{{.Name}}osImageSKU')]",
             "version": "[variables('{{.Name}}osImageVersion')]"
+            {{end}}
           },
           "osDisk": {
             "createOption": "FromImage"
@@ -256,7 +279,7 @@
       ],
       "location": "[variables('location')]",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')),'/cse', copyIndex(variables('{{.Name}}Offset')))]",
+      "name": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')),'/cse', '-agent-', copyIndex(variables('{{.Name}}Offset')))]",
       "properties": {
         "publisher": "Microsoft.Azure.Extensions",
         "type": "CustomScript",
@@ -264,7 +287,11 @@
         "autoUpgradeMinorVersion": true,
         "settings": {},
         "protectedSettings": {
+        {{if IsOpenShift }}
+          "script": "{{ Base64 (OpenShiftGetNodeSh .) }}"
+        {{else}}
           "commandToExecute": "[concat(variables('provisionScriptParametersCommon'),' /usr/bin/nohup /bin/bash -c \"/bin/bash /opt/azure/containers/provision.sh >> /var/log/azure/cluster-provision.log 2>&1\"')]"
+        {{end}}
         }
       }
     }

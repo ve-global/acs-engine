@@ -1,3 +1,20 @@
+{{if HasWindowsCustomImage}}
+    {"type": "Microsoft.Compute/images",
+      "apiVersion": "2017-12-01",
+      "name": "{{.Name}}CustomWindowsImage",
+      "location": "[variables('location')]",
+      "properties": {
+        "storageProfile": {
+          "osDisk": {
+            "osType": "Windows",
+            "osState": "Generalized",
+            "blobUri": "[parameters('agentWindowsSourceUrl')]",
+            "storageAccountType": "Standard_LRS"
+          }
+        }
+      }
+    },
+{{end}}
     {
       "apiVersion": "[variables('apiVersionDefault')]",
       "copy": {
@@ -165,10 +182,14 @@
         "storageProfile": {
           {{GetDataDisks .}}
           "imageReference": {
+{{if HasWindowsCustomImage}}
+            "id": "[resourceId('Microsoft.Compute/images','{{.Name}}CustomWindowsImage')]"
+{{else}}
             "offer": "[variables('agentWindowsOffer')]",
             "publisher": "[variables('agentWindowsPublisher')]",
             "sku": "[variables('agentWindowsSku')]",
             "version": "[variables('agentWindowsVersion')]"
+{{end}}
           },
           "osDisk": {
             "createOption": "FromImage"
@@ -249,7 +270,7 @@
         "autoUpgradeMinorVersion": true,
         "settings": {},
         "protectedSettings": {
-          "commandToExecute": "[concat('powershell.exe -ExecutionPolicy Unrestricted -command \"', '$arguments = ', variables('singleQuote'),'-MasterIP ',variables('kubernetesAPIServerIP'),' -KubeDnsServiceIp ',variables('kubeDnsServiceIp'),' -MasterFQDNPrefix ',variables('masterFqdnPrefix'),' -Location ',variables('location'),' -AgentKey ',variables('clientPrivateKey'),' -AzureHostname ',variables('{{.Name}}VMNamePrefix'),copyIndex(variables('{{.Name}}Offset')),' -AADClientId ',variables('servicePrincipalClientId'),' -AADClientSecret ',variables('servicePrincipalClientSecret'),variables('singleQuote'), ' ; ', variables('windowsCustomScriptSuffix'), '\" > %SYSTEMDRIVE%\\AzureData\\CustomDataSetupScript.log 2>&1')]"
+          "commandToExecute": "[concat('powershell.exe -ExecutionPolicy Unrestricted -command \"', '$arguments = ', variables('singleQuote'),'-MasterIP ',variables('kubernetesAPIServerIP'),' -KubeDnsServiceIp ',variables('kubeDnsServiceIp'),' -MasterFQDNPrefix ',variables('masterFqdnPrefix'),' -Location ',variables('location'),' -AgentKey ',variables('clientPrivateKey'),' -AADClientId ',variables('servicePrincipalClientId'),' -AADClientSecret ',variables('servicePrincipalClientSecret'),variables('singleQuote'), ' ; ', variables('windowsCustomScriptSuffix'), '\" > %SYSTEMDRIVE%\\AzureData\\CustomDataSetupScript.log 2>&1')]"
         }
       }
     }

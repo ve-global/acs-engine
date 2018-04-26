@@ -97,7 +97,7 @@ ifneq ($(GIT_BASEDIR),)
 endif
 
 test: generate
-	ginkgo -skipPackage test/e2e -r .
+	ginkgo -skipPackage test/e2e/dcos,test/e2e/kubernetes -r .
 
 .PHONY: test-style
 test-style:
@@ -145,7 +145,7 @@ ci: bootstrap test-style build test lint
 
 .PHONY: coverage
 coverage:
-	@scripts/ginkgo.coverage.sh
+	@scripts/ginkgo.coverage.sh --codecov
 
 devenv:
 	./scripts/devenv.sh

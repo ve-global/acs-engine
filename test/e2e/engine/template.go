@@ -20,6 +20,7 @@ import (
 type Config struct {
 	ClientID              string `envconfig:"CLIENT_ID"`
 	ClientSecret          string `envconfig:"CLIENT_SECRET"`
+	ClientObjectID        string `envconfig:"CLIENT_OBJECTID"`
 	MasterDNSPrefix       string `envconfig:"DNS_PREFIX"`
 	AgentDNSPrefix        string `envconfig:"DNS_PREFIX"`
 	PublicSSHKey          string `envconfig:"PUBLIC_SSH_KEY"`
@@ -28,6 +29,7 @@ type Config struct {
 	OrchestratorVersion   string `envconfig:"ORCHESTRATOR_VERSION"`
 	OutputDirectory       string `envconfig:"OUTPUT_DIR" default:"_output"`
 	CreateVNET            bool   `envconfig:"CREATE_VNET" default:"false"`
+	EnableKMSEncryption   bool   `envconfig:"ENABLE_KMS_ENCRYPTION" default:"false"`
 
 	ClusterDefinitionPath     string // The original template we want to use to build the cluster from.
 	ClusterDefinitionTemplate string // This is the template after we splice in the environment variables
@@ -127,6 +129,11 @@ func Build(cfg *config.Config, subnetID string) (*Engine, error) {
 		}
 	}
 
+	if config.EnableKMSEncryption && config.ClientObjectID != "" {
+		cs.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.EnableEncryptionWithExternalKms = &config.EnableKMSEncryption
+		cs.ContainerService.Properties.ServicePrincipalProfile.ObjectID = config.ClientObjectID
+	}
+
 	return &Engine{
 		Config:            config,
 		ClusterDefinition: cs,
@@ -180,11 +187,6 @@ func (e *Engine) HasAddon(name string) (bool, api.KubernetesAddon) {
 		}
 	}
 	return false, api.KubernetesAddon{}
-}
-
-// OrchestratorVersion1Dot8AndUp will return true if the orchestrator version is 1.8 and up
-func (e *Engine) OrchestratorVersion1Dot8AndUp() bool {
-	return e.ClusterDefinition.ContainerService.Properties.OrchestratorProfile.OrchestratorVersion >= "1.8"
 }
 
 // Write will write the cluster definition to disk
