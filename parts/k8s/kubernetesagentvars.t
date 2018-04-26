@@ -32,9 +32,3 @@
     "{{.Name}}osImageVersion": "[parameters('{{.Name}}osImageVersion')]",
     "{{.Name}}osImageName": "[parameters('{{.Name}}osImageName')]",
     "{{.Name}}osImageResourceGroup": "[parameters('{{.Name}}osImageResourceGroup')]",
-    "{{.Name}}DefaultVMTags": {
-      "creationSource" : "[concat(variables('generatorCode'), '-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
-      "resourceNameSuffix" : "[variables('nameSuffix')]",
-      "orchestrator" : "[variables('orchestratorNameVersionTag')]",
-      "poolName" : "{{.Name}}"
-    },

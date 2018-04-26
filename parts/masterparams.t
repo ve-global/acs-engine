@@ -192,10 +192,3 @@
     {{end}}
   {{end}}
 {{end}} {{end}}
-    ,"masterVMtags": {
-      "metadata": {
-        "description": "Sets additionals VM Tags."
-      },
-      "type": "object",
-      "defaultValue": {}
-    }

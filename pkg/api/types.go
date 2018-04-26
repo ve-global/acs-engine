@@ -358,7 +358,7 @@ type MasterProfile struct {
 	// Master LB public endpoint/FQDN with port
 	// The format will be FQDN:2376
 	// Not used during PUT, returned as part of GET
-	FQDN string `json:"fqdn,omitempty"`
+	FQDN   string            `json:"fqdn,omitempty"`
 	VMTags map[string]string `json:"vmtags,omitempty"`
 }
 
@@ -661,6 +661,11 @@ func (m *MasterProfile) IsCoreOS() bool {
 	return m.Distro == CoreOS
 }
 
+// hasVMTags returns true if there is any additional VMTag
+func (m *MasterProfile) hasVMTags() bool {
+	return len(m.VMTags) > 0
+}
+
 // IsCustomVNET returns true if the customer brought their own VNET
 func (a *AgentPoolProfile) IsCustomVNET() bool {
 	return len(a.VnetSubnetID) > 0
@@ -709,6 +714,11 @@ func (a *AgentPoolProfile) IsStorageAccount() bool {
 // HasDisks returns true if the customer specified disks
 func (a *AgentPoolProfile) HasDisks() bool {
 	return len(a.DiskSizesGB) > 0
+}
+
+// hasVMTags returns true if there is any additional VMTag
+func (a *AgentPoolProfile) hasVMTags() bool {
+	return len(a.VMTags) > 0
 }
 
 // HasSecrets returns true if the customer specified secrets to install

@@ -137,7 +137,18 @@
         "[concat('Microsoft.Network/networkInterfaces/', variables('{{.Name}}VMNamePrefix'), 'nic-', copyIndex(variables('{{.Name}}Offset')))]",
         "[concat('Microsoft.Compute/availabilitySets/', variables('{{.Name}}AvailabilitySet'))]"
       ],
-      "tags": "[union(variables('{{.Name}}DefaultVMTags'), parameters('{{.Name}}VMTags'))]",
+      "tags":
+      {
+        "creationSource" : "[concat(variables('generatorCode'), '-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
+        "resourceNameSuffix" : "[variables('nameSuffix')]",
+        "orchestrator" : "[variables('orchestratorNameVersionTag')]",
+        "poolName" : "{{.Name}}"
+        {{if .hasVMTags}}
+        {{range $key, $value := .VMTags}}
+        ,"{{key}}" = "{{value}}"
+        {{end}}
+        {{end}}
+      },
       "location": "[variables('location')]",
       "name": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
       {{if UseManagedIdentity}}

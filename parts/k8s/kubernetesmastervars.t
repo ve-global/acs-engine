@@ -441,9 +441,3 @@
      "clusterKeyVaultName": "[take(concat(resourceGroup().location, '-' , uniqueString(concat(variables('masterFqdnPrefix'),'-',resourceGroup().location))), 20)]",
      "clusterKeyVaultSku" : "[parameters('clusterKeyVaultSku')]"
 {{end}}
-    ,"masterDefaultVMTags": {
-        "creationSource" : "[concat(variables('generatorCode'), '-', variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",
-        "resourceNameSuffix" : "[variables('nameSuffix')]",
-        "orchestrator" : "[variables('orchestratorNameVersionTag')]",
-        "poolName" : "master"
-    }

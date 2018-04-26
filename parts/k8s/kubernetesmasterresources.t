@@ -843,7 +843,18 @@
         ,"[variables('masterStorageAccountName')]"
 {{end}}
       ],
-      "tags": "[union(variables('masterDefaultVMTags'), parameters('masterVMTags'))]",
+      "tags":
+      {
+        "creationSource" : "[concat(variables('generatorCode'), '-', variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",
+        "resourceNameSuffix" : "[variables('nameSuffix')]",
+        "orchestrator" : "[variables('orchestratorNameVersionTag')]",
+        "poolName" : "master"
+        {{if .MasterProfile.hasVMTags}}
+        {{range $key, $value := .MasterProfile.VMTags}}
+        ,"{{key}}" = "{{value}}"
+        {{end}}
+        {{end}}
+      },
       "location": "[variables('location')]",
       "name": "[concat(variables('masterVMNamePrefix'), copyIndex(variables('masterOffset')))]",
       {{if UseManagedIdentity}}
