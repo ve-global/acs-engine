@@ -864,6 +864,10 @@ func convertVLabsMasterProfile(vlabs *vlabs.MasterProfile, api *MasterProfile) {
 		api.KubernetesConfig = &KubernetesConfig{}
 		convertVLabsKubernetesConfig(vlabs.KubernetesConfig, api.KubernetesConfig)
 	}
+	api.VMTags = map[string]string{}
+	for k, v := range vlabs.VMTags {
+		api.VMTags[k] = v
+	}
 	if vlabs.ImageRef != nil {
 		api.ImageRef = &ImageReference{}
 		api.ImageRef.Name = vlabs.ImageRef.Name
@@ -970,6 +974,10 @@ func convertVLabsAgentPoolProfile(vlabs *vlabs.AgentPoolProfile, api *AgentPoolP
 	if vlabs.KubernetesConfig != nil {
 		api.KubernetesConfig = &KubernetesConfig{}
 		convertVLabsKubernetesConfig(vlabs.KubernetesConfig, api.KubernetesConfig)
+	}
+	api.VMTags = map[string]string{}
+	for k, v := range vlabs.VMTags {
+		api.VMTags[k] = v
 	}
 	if vlabs.ImageRef != nil {
 		api.ImageRef = &ImageReference{}

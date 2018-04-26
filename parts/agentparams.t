@@ -103,4 +103,11 @@
       },
       "type": "string"
     }
-  {{end}}
+{{end}}
+  ,"{{.Name}}VMtags": {
+      "metadata": {
+        "description": "Sets additionals VM Tags."
+      }
+      "type": "object",
+      "defaultValue": {}
+  }

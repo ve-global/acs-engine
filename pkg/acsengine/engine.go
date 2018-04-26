@@ -496,6 +496,9 @@ func getParameters(cs *api.ContainerService, isClassicMode bool, generatorCode s
 		if isClassicMode {
 			addValue(parametersMap, "masterCount", properties.MasterProfile.Count)
 		}
+		if properties.MasterProfile.VMTags != nil {
+			addValue(parametersMap, "masterVMTags", properties.MasterProfile.VMTags)
+		}
 	}
 	if properties.HostedMasterProfile != nil {
 		addValue(parametersMap, "masterSubnet", properties.HostedMasterProfile.Subnet)
@@ -818,6 +821,9 @@ func getParameters(cs *api.ContainerService, isClassicMode bool, generatorCode s
 			addValue(parametersMap, fmt.Sprintf("%sosImageSKU", agentProfile.Name), cloudSpecConfig.OSImageConfig[agentProfile.Distro].ImageSku)
 			addValue(parametersMap, fmt.Sprintf("%sosImagePublisher", agentProfile.Name), cloudSpecConfig.OSImageConfig[agentProfile.Distro].ImagePublisher)
 			addValue(parametersMap, fmt.Sprintf("%sosImageVersion", agentProfile.Name), cloudSpecConfig.OSImageConfig[agentProfile.Distro].ImageVersion)
+		}
+		if agentProfile.VMTags != nil {
+			addValue(parametersMap, fmt.Sprintf("%sVMTags", agentProfile.Name), agentProfile.VMTags)
 		}
 	}
 

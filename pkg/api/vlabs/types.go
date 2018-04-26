@@ -351,6 +351,7 @@ type MasterProfile struct {
 	// The format will be FQDN:2376
 	// Not used during PUT, returned as part of GET
 	FQDN string `json:"fqdn,omitempty"`
+	VMTags map[string]string `json:"vmtags,omitempty"`
 }
 
 // ImageReference represents a reference to an Image resource in Azure.
@@ -407,6 +408,7 @@ type AgentPoolProfile struct {
 	CustomNodeLabels      map[string]string `json:"customNodeLabels,omitempty"`
 	PreProvisionExtension *Extension        `json:"preProvisionExtension"`
 	Extensions            []Extension       `json:"extensions"`
+	VMTags                map[string]string `json:"vmtags,omitempty"`
 }
 
 // AgentPoolProfileRole represents an agent role
