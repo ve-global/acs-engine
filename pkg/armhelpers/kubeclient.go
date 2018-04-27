@@ -5,12 +5,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	policy "k8s.io/api/policy/v1beta1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -58,7 +59,7 @@ func (c *KubernetesClientSetClient) UpdateNode(node *v1.Node) (*v1.Node, error) 
 
 //DeleteNode deregisters the node in the api server
 func (c *KubernetesClientSetClient) DeleteNode(name string) error {
-	return c.clientset.Nodes().Delete(name, &metav1.DeleteOptions{})
+	return c.clientset.CoreV1().Nodes().Delete(name, &metav1.DeleteOptions{})
 }
 
 //SupportEviction queries the api server to discover if it supports eviction, and returns supported type if it is supported
