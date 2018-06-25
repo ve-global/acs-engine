@@ -71,6 +71,22 @@ Administrative note: By default, the directory where acs-engine stores cluster c
 
 **Note**: If the cluster is using an existing VNET please see the [Custom VNET](features.md#feat-custom-vnet) feature documentation for additional steps that must be completed after cluster provisioning.
 
+The deploy command lets you override any values under the properties tag (even in arrays) from the cluster definition file without having to update the file. You can use the `--set` flag to do that. For example:
+
+```bash
+acs-engine deploy --resource-group "your-resource-group" \
+  --location "westeurope" \
+  --subscription-id "your-subscription-id" \
+  --api-model "./apimodel.json" \
+  --set masterProfile.dnsPrefix="your-dns-prefix-override" \
+  --set agentPoolProfiles[0].name="your-agentpool-0-name-override" \
+  --set agentPoolProfiles[0].count=1 \
+  --set linuxProfile.ssh.publicKeys[0].keyData="ssh-rsa PUBLICKEY azureuser@linuxvm" \
+  --set servicePrincipalProfile.clientId="spn-client-id" \
+  --set servicePrincipalProfile.secret="spn-client-secret"
+```
+
+
 <a href="#the-long-way"></a>
 
 ## ACS Engine the Long Way
@@ -98,11 +114,25 @@ Edit the [simple Kubernetes cluster definition](/examples/kubernetes.json) and f
 
 Optional: attach to an existing virtual network (VNET). Details [here](features.md#feat-custom-vnet)
 
+Note: you can then use the `--set` option of the generate command to override values from the cluster definition file directly in the command line (cf. [Step 4](deploy.md#step-4-generate-the-templates))
+
 ### Step 4: Generate the Templates
 
 The generate command takes a cluster definition and outputs a number of templates which describe your Kubernetes cluster. By default, `generate` will create a new directory named after your cluster nested in the `_output` directory. If my dnsPrefix was `larry` my cluster templates would be found in `_output/larry-`.
 
 Run `acs-engine generate examples/kubernetes.json`
+
+The generate command lets you override values from the cluster definition file without having to update the file. You can use the `--set` flag to do that:
+
+```bash
+acs-engine generate --set linuxProfile.adminUsername=myNewUsername,masterProfile.count=3 clusterdefinition.json
+```
+
+The `--set` flag only supports JSON properties under `properties`. You can also work with array, like the following:
+
+```bash
+acs-engine generate --set agentPoolProfiles[0].count=5,agentPoolProfiles[1].name=myPoolName clusterdefinition.json
+```
 
 ### Step 5: Submit your Templates to Azure Resource Manager (ARM)
 
@@ -114,3 +144,33 @@ Run `acs-engine generate examples/kubernetes.json`
 
 
 **Note**: If the cluster is using an existing VNET please see the [Custom VNET](features.md#feat-custom-vnet) feature documentation for additional steps that must be completed after cluster provisioning.
+
+
+## Checking VM tags
+
+### First we get list of Master and Agent VMs in the cluster
+```sh
+az vm list -g <resource group of cluster> -o table
+Name                      ResourceGroup                    Location
+------------------------  -------------------------------  -------------
+k8s-agentpool1-22116803-1       XXXXXXXXXXXX                  southeastasia
+k8s-master-22116803-0           XXXXXXXXXXXX                  southeastasia
+```
+
+### Once we have the VM Names, we can check tags associated with any of the VMs using the command below
+
+```sh
+az vm show -g <resource group of cluster> -n <name of Master or agent VM> --query tags
+```
+
+    Sample JSON out of this command is shown below. This command can also be used to check the acs-engine version which was used to create the cluster
+
+```json
+{
+  "acsengineVersion": "v0.15.0",
+  "creationSource": "acsengine-k8s-master-22116803-0",
+  "orchestrator": "Kubernetes:1.9.5",
+  "poolName": "master",
+  "resourceNameSuffix": "22116803"
+}
+```

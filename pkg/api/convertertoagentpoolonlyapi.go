@@ -38,7 +38,7 @@ const (
 func ConvertV20170831AgentPoolOnly(v20170831 *v20170831.ManagedCluster) *ContainerService {
 	c := &ContainerService{}
 	c.ID = v20170831.ID
-	c.Location = NormalizeAzureRegion(v20170831.Location)
+	c.Location = helpers.NormalizeAzureRegion(v20170831.Location)
 	c.Name = v20170831.Name
 	if v20170831.Plan != nil {
 		c.Plan = convertv20170831AgentPoolOnlyResourcePurchasePlan(v20170831.Plan)
@@ -56,7 +56,7 @@ func ConvertV20170831AgentPoolOnly(v20170831 *v20170831.ManagedCluster) *Contain
 func ConvertV20180331AgentPoolOnly(v20180331 *v20180331.ManagedCluster) *ContainerService {
 	c := &ContainerService{}
 	c.ID = v20180331.ID
-	c.Location = NormalizeAzureRegion(v20180331.Location)
+	c.Location = helpers.NormalizeAzureRegion(v20180331.Location)
 	c.Name = v20180331.Name
 	if v20180331.Plan != nil {
 		c.Plan = convertv20180331AgentPoolOnlyResourcePurchasePlan(v20180331.Plan)
@@ -113,7 +113,7 @@ func convertV20170831AgentPoolOnlyProperties(obj *v20170831.Properties) *Propert
 func ConvertVLabsAgentPoolOnly(vlabs *vlabs.ManagedCluster) *ContainerService {
 	c := &ContainerService{}
 	c.ID = vlabs.ID
-	c.Location = NormalizeAzureRegion(vlabs.Location)
+	c.Location = helpers.NormalizeAzureRegion(vlabs.Location)
 	c.Name = vlabs.Name
 	if vlabs.Plan != nil {
 		c.Plan = &ResourcePurchasePlan{}
@@ -225,12 +225,12 @@ func convertVLabsAgentPoolOnlyWindowsProfile(vlabs *vlabs.WindowsProfile, api *W
 func convertV20170831AgentPoolOnlyOrchestratorProfile(kubernetesVersion string) *OrchestratorProfile {
 	return &OrchestratorProfile{
 		OrchestratorType:    Kubernetes,
-		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion),
+		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion, false),
 		KubernetesConfig: &KubernetesConfig{
 			EnableRbac:          helpers.PointerToBool(false),
 			EnableSecureKubelet: helpers.PointerToBool(false),
 			// set network default for un-versioned model
-			NetworkPolicy:      "none",
+			NetworkPlugin:      string(v20180331.Kubenet),
 			ClusterSubnet:      DefaultKubernetesClusterSubnet,
 			ServiceCIDR:        DefaultKubernetesServiceCIDR,
 			DNSServiceIP:       DefaultKubernetesDNSServiceIP,
@@ -242,7 +242,7 @@ func convertV20170831AgentPoolOnlyOrchestratorProfile(kubernetesVersion string) 
 func convertVLabsAgentPoolOnlyOrchestratorProfile(kubernetesVersion string) *OrchestratorProfile {
 	return &OrchestratorProfile{
 		OrchestratorType:    Kubernetes,
-		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion),
+		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion, false),
 	}
 }
 
@@ -353,8 +353,13 @@ func convertV20180331AgentPoolOnlyProperties(obj *v20180331.Properties) *Propert
 	if obj.ServicePrincipalProfile != nil {
 		properties.ServicePrincipalProfile = convertV20180331AgentPoolOnlyServicePrincipalProfile(obj.ServicePrincipalProfile)
 	}
+
 	if obj.AddonProfiles != nil {
 		properties.AddonProfiles = convertV20180331AgentPoolOnlyAddonProfiles(obj.AddonProfiles)
+	}
+
+	if obj.AADProfile != nil {
+		properties.AADProfile = convertV20180331AgentPoolOnlyAADProfile(obj.AADProfile)
 	}
 
 	return properties
@@ -400,7 +405,11 @@ func convertV20180331AgentPoolOnlyOrchestratorProfile(kubernetesVersion string, 
 	if networkProfile != nil {
 		switch networkProfile.NetworkPlugin {
 		case v20180331.Azure:
-			kubernetesConfig.NetworkPolicy = "azure"
+			kubernetesConfig.NetworkPlugin = "azure"
+
+			if networkProfile.NetworkPolicy != "" {
+				kubernetesConfig.NetworkPolicy = string(networkProfile.NetworkPolicy)
+			}
 
 			if networkProfile.ServiceCidr != "" {
 				kubernetesConfig.ServiceCIDR = networkProfile.ServiceCidr
@@ -420,9 +429,17 @@ func convertV20180331AgentPoolOnlyOrchestratorProfile(kubernetesVersion string, 
 				kubernetesConfig.DockerBridgeSubnet = DefaultDockerBridgeSubnet
 			}
 		case v20180331.Kubenet:
-			kubernetesConfig.NetworkPolicy = "none"
+			kubernetesConfig.NetworkPlugin = "kubenet"
 
-			kubernetesConfig.ClusterSubnet = DefaultKubernetesClusterSubnet
+			if networkProfile.NetworkPolicy != "" {
+				kubernetesConfig.NetworkPolicy = string(networkProfile.NetworkPolicy)
+			}
+
+			if networkProfile.PodCidr != "" {
+				kubernetesConfig.ClusterSubnet = networkProfile.PodCidr
+			} else {
+				kubernetesConfig.ClusterSubnet = DefaultKubernetesClusterSubnet
+			}
 
 			if networkProfile.ServiceCidr != "" {
 				kubernetesConfig.ServiceCIDR = networkProfile.ServiceCidr
@@ -441,15 +458,10 @@ func convertV20180331AgentPoolOnlyOrchestratorProfile(kubernetesVersion string, 
 			} else {
 				kubernetesConfig.DockerBridgeSubnet = DefaultDockerBridgeSubnet
 			}
-		default:
-			kubernetesConfig.NetworkPolicy = string(networkProfile.NetworkPlugin)
-			kubernetesConfig.ServiceCIDR = networkProfile.ServiceCidr
-			kubernetesConfig.DNSServiceIP = networkProfile.DNSServiceIP
-			kubernetesConfig.DockerBridgeSubnet = networkProfile.DockerBridgeCidr
 		}
 	} else {
 		// set network default for un-versioned model
-		kubernetesConfig.NetworkPolicy = "none"
+		kubernetesConfig.NetworkPlugin = string(v20180331.Kubenet)
 		kubernetesConfig.ClusterSubnet = DefaultKubernetesClusterSubnet
 		kubernetesConfig.ServiceCIDR = DefaultKubernetesServiceCIDR
 		kubernetesConfig.DNSServiceIP = DefaultKubernetesDNSServiceIP
@@ -458,7 +470,7 @@ func convertV20180331AgentPoolOnlyOrchestratorProfile(kubernetesVersion string, 
 
 	return &OrchestratorProfile{
 		OrchestratorType:    Kubernetes,
-		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion),
+		OrchestratorVersion: common.GetSupportedKubernetesVersion(kubernetesVersion, false),
 		KubernetesConfig:    kubernetesConfig,
 	}
 }
@@ -509,4 +521,14 @@ func convertV20180331AgentPoolOnlyAddonProfiles(obj map[string]v20180331.AddonPr
 		}
 	}
 	return api
+}
+
+func convertV20180331AgentPoolOnlyAADProfile(obj *v20180331.AADProfile) *AADProfile {
+	return &AADProfile{
+		ClientAppID:     obj.ClientAppID,
+		ServerAppID:     obj.ServerAppID,
+		ServerAppSecret: obj.ServerAppSecret,
+		TenantID:        obj.TenantID,
+		Authenticator:   Webhook,
+	}
 }

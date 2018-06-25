@@ -1,6 +1,7 @@
 package acsengine
 
 import (
+	"encoding/base64"
 	"reflect"
 	"testing"
 
@@ -119,6 +120,7 @@ func TestSetMissingKubeletValues(t *testing.T) {
 		"--image-gc-low-threshold":       "7",
 		"--non-masquerade-cidr":          "8",
 		"--cloud-provider":               "9",
+		"--pod-max-pids":                 "10",
 	}
 	setMissingKubeletValues(config, defaultKubeletConfig)
 	for key, val := range defaultKubeletConfig {
@@ -144,6 +146,7 @@ func TestSetMissingKubeletValues(t *testing.T) {
 		"--image-gc-low-threshold":       "7",
 		"--non-masquerade-cidr":          "8",
 		"--cloud-provider":               "c",
+		"--pod-max-pids":                 "10",
 	}
 	setMissingKubeletValues(config, defaultKubeletConfig)
 	for key, val := range expectedResult {
@@ -280,7 +283,7 @@ func TestAssignDefaultAddonVals(t *testing.T) {
 
 }
 
-func TestKubeletFeatureGatesEnsureAcceleratorsOnAgentsFor1_6_0(t *testing.T) {
+func TestKubeletFeatureGatesEnsureFeatureGatesOnAgentsFor1_6_0(t *testing.T) {
 	mockCS := getMockBaseContainerService("1.6.0")
 	properties := mockCS.Properties
 
@@ -291,11 +294,11 @@ func TestKubeletFeatureGatesEnsureAcceleratorsOnAgentsFor1_6_0(t *testing.T) {
 	setKubeletConfig(&mockCS)
 
 	agentFeatureGates := properties.AgentPoolProfiles[0].KubernetesConfig.KubeletConfig["--feature-gates"]
-	if agentFeatureGates != "Accelerators=true,TopLevel=true" {
-		t.Fatalf("setKubeletConfig did not add 'Accelerators=true' for agent profile: expected 'Accelerators=true;TopLevel=true' got '%s'", agentFeatureGates)
+	if agentFeatureGates != "TopLevel=true" {
+		t.Fatalf("setKubeletConfig did not add 'TopLevel=true' for agent profile: expected 'TopLevel=true' got '%s'", agentFeatureGates)
 	}
 
-	// Verify that the Accelerators feature gate override has only been applied to the agents
+	// Verify that the TopLevel feature gate override has only been applied to the agents
 	masterFeatureFates := properties.MasterProfile.KubernetesConfig.KubeletConfig["--feature-gates"]
 	if masterFeatureFates != "TopLevel=true" {
 		t.Fatalf("setKubeletConfig modified feature gates for master profile: expected 'TopLevel=true' got '%s'", agentFeatureGates)
@@ -315,11 +318,11 @@ func TestKubeletFeatureGatesEnsureMasterAndAgentConfigUsedFor1_6_0(t *testing.T)
 	setKubeletConfig(&mockCS)
 
 	agentFeatureGates := properties.AgentPoolProfiles[0].KubernetesConfig.KubeletConfig["--feature-gates"]
-	if agentFeatureGates != "Accelerators=true,AgentLevel=true" {
-		t.Fatalf("setKubeletConfig agent profile: expected 'Accelerators=true,AgentLevel=true' got '%s'", agentFeatureGates)
+	if agentFeatureGates != "AgentLevel=true" {
+		t.Fatalf("setKubeletConfig agent profile: expected 'AgentLevel=true' got '%s'", agentFeatureGates)
 	}
 
-	// Verify that the Accelerators feature gate override has only been applied to the agents
+	// Verify that the TopLevel feature gate override has only been applied to the agents
 	masterFeatureFates := properties.MasterProfile.KubernetesConfig.KubeletConfig["--feature-gates"]
 	if masterFeatureFates != "MasterLevel=true" {
 		t.Fatalf("setKubeletConfig master profile: expected 'MasterLevel=true' got '%s'", agentFeatureGates)
@@ -383,6 +386,205 @@ func TestEtcdDiskSize(t *testing.T) {
 	}
 }
 
+func TestGenerateEtcdEncryptionKey(t *testing.T) {
+	key1 := generateEtcdEncryptionKey()
+	key2 := generateEtcdEncryptionKey()
+	if key1 == key2 {
+		t.Fatalf("generateEtcdEncryptionKey should return a unique key each time, instead returned identical %s and %s", key1, key2)
+	}
+	for _, val := range []string{key1, key2} {
+		_, err := base64.StdEncoding.DecodeString(val)
+		if err != nil {
+			t.Fatalf("generateEtcdEncryptionKey should return a base64 encoded key, instead returned %s", val)
+		}
+	}
+}
+
+func TestNetworkPolicyDefaults(t *testing.T) {
+	mockCS := getMockBaseContainerService("1.8.10")
+	properties := mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = "calico"
+	setOrchestratorDefaults(&mockCS)
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin != "kubenet" {
+		t.Fatalf("NetworkPlugin did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin, "kubenet")
+	}
+
+	mockCS = getMockBaseContainerService("1.8.10")
+	properties = mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = "cilium"
+	setOrchestratorDefaults(&mockCS)
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin != "cilium" {
+		t.Fatalf("NetworkPlugin did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin, "cilium")
+	}
+
+	mockCS = getMockBaseContainerService("1.8.10")
+	properties = mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = "azure"
+	setOrchestratorDefaults(&mockCS)
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin != "azure" {
+		t.Fatalf("NetworkPlugin did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin, "azure")
+	}
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy != "" {
+		t.Fatalf("NetworkPolicy did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy, "")
+	}
+
+	mockCS = getMockBaseContainerService("1.8.10")
+	properties = mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = "none"
+	setOrchestratorDefaults(&mockCS)
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin != "kubenet" {
+		t.Fatalf("NetworkPlugin did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin, "kubenet")
+	}
+	if properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy != "" {
+		t.Fatalf("NetworkPolicy did not have the expected value, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy, "")
+	}
+}
+
+func TestStorageProfile(t *testing.T) {
+	// Test ManagedDisks default configuration
+	mockCS := getMockBaseContainerService("1.8.10")
+	properties := mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.MasterProfile.Count = 1
+	properties.OrchestratorProfile.KubernetesConfig.PrivateCluster = &api.PrivateCluster{
+		Enabled:        helpers.PointerToBool(true),
+		JumpboxProfile: &api.PrivateJumpboxProfile{},
+	}
+	setPropertiesDefaults(&mockCS, false)
+	if properties.MasterProfile.StorageProfile != api.ManagedDisks {
+		t.Fatalf("MasterProfile.StorageProfile did not have the expected configuration, got %s, expected %s",
+			properties.MasterProfile.StorageProfile, api.ManagedDisks)
+	}
+	if !properties.MasterProfile.IsManagedDisks() {
+		t.Fatalf("MasterProfile.StorageProfile did not have the expected configuration, got %t, expected %t",
+			false, true)
+	}
+	if properties.AgentPoolProfiles[0].StorageProfile != api.ManagedDisks {
+		t.Fatalf("AgentPoolProfile.StorageProfile did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].StorageProfile, api.ManagedDisks)
+	}
+	if !properties.AgentPoolProfiles[0].IsManagedDisks() {
+		t.Fatalf("AgentPoolProfile.IsManagedDisks() did not have the expected configuration, got %t, expected %t",
+			false, true)
+	}
+	if properties.OrchestratorProfile.KubernetesConfig.PrivateCluster.JumpboxProfile.StorageProfile != api.ManagedDisks {
+		t.Fatalf("MasterProfile.StorageProfile did not have the expected configuration, got %s, expected %s",
+			properties.OrchestratorProfile.KubernetesConfig.PrivateCluster.JumpboxProfile.StorageProfile, api.ManagedDisks)
+	}
+	if !properties.AgentPoolProfiles[0].IsAvailabilitySets() {
+		t.Fatalf("AgentPoolProfile[0].AvailabilityProfile did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].AvailabilityProfile, api.AvailabilitySet)
+	}
+
+	mockCS = getMockBaseContainerService("1.10.2")
+	properties = mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	setPropertiesDefaults(&mockCS, false)
+	if !properties.AgentPoolProfiles[0].IsVirtualMachineScaleSets() {
+		t.Fatalf("AgentPoolProfile[0].AvailabilityProfile did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].AvailabilityProfile, api.VirtualMachineScaleSets)
+	}
+
+}
+
+func TestAgentPoolProfile(t *testing.T) {
+	mockCS := getMockBaseContainerService("1.10")
+	properties := mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.MasterProfile.Count = 1
+	setPropertiesDefaults(&mockCS, false)
+	if properties.AgentPoolProfiles[0].ScaleSetPriority != "" {
+		t.Fatalf("AgentPoolProfiles[0].ScaleSetPriority did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].ScaleSetPriority, "")
+	}
+	if properties.AgentPoolProfiles[0].ScaleSetEvictionPolicy != "" {
+		t.Fatalf("AgentPoolProfiles[0].ScaleSetEvictionPolicy did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].ScaleSetEvictionPolicy, "")
+	}
+	properties.AgentPoolProfiles[0].ScaleSetPriority = api.ScaleSetPriorityLow
+	setPropertiesDefaults(&mockCS, false)
+	if properties.AgentPoolProfiles[0].ScaleSetEvictionPolicy != api.ScaleSetEvictionPolicyDelete {
+		t.Fatalf("AgentPoolProfile[0].ScaleSetEvictionPolicy did not have the expected configuration, got %s, expected %s",
+			properties.AgentPoolProfiles[0].ScaleSetEvictionPolicy, api.ScaleSetEvictionPolicyDelete)
+	}
+}
+
+// TestSetComponentsNetworkDefaults covers tests for setMasterNetworkDefaults and setAgentNetworkDefaults
+// TODO: Currently this test covers only api.Distro setting. Extend test cases to cover network configuration too.
+func TestSetComponentsNetworkDefaults(t *testing.T) {
+
+	var tests = []struct {
+		name                string                  // test case name
+		orchestratorProfile api.OrchestratorProfile // orchestrator to be tested
+		expectedDistro      api.Distro              // expected result default disto to be used
+	}{
+		{
+			"ubuntu_kubernetes",
+			api.OrchestratorProfile{
+				OrchestratorType: api.Kubernetes,
+			},
+			api.Ubuntu,
+		},
+		{
+			"rhel_openshift",
+			api.OrchestratorProfile{
+				OrchestratorType: api.OpenShift,
+			},
+			"",
+		},
+	}
+
+	for _, test := range tests {
+		mockAPI := getMockAPIProperties("1.0.0")
+		mockAPI.OrchestratorProfile = &test.orchestratorProfile
+		setMasterNetworkDefaults(&mockAPI, false)
+		setAgentNetworkDefaults(&mockAPI)
+		if mockAPI.MasterProfile.Distro != test.expectedDistro {
+			t.Fatalf("setMasterNetworkDefaults() test case %v did not return right Distro configurations %v != %v", test.name, mockAPI.MasterProfile.Distro, test.expectedDistro)
+		}
+		for _, agent := range mockAPI.AgentPoolProfiles {
+			if agent.Distro != test.expectedDistro {
+				t.Fatalf("setAgentNetworkDefaults() test case %v did not return right Distro configurations %v != %v", test.name, agent.Distro, test.expectedDistro)
+			}
+		}
+	}
+}
+
+func TestIsAzureCNINetworkmonitorAddon(t *testing.T) {
+	mockCS := getMockBaseContainerService("1.10.3")
+	properties := mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.MasterProfile.Count = 1
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = "azure"
+	setOrchestratorDefaults(&mockCS)
+
+	i := getAddonsIndexByName(properties.OrchestratorProfile.KubernetesConfig.Addons, AzureCNINetworkMonitoringAddonName)
+	if !helpers.IsTrueBoolPointer(properties.OrchestratorProfile.KubernetesConfig.Addons[i].Enabled) {
+		t.Fatalf("Azure CNI network plugin configuration should add Azure CNI networkmonitor addon")
+	}
+	mockCS = getMockBaseContainerService("1.10.3")
+	properties = mockCS.Properties
+	properties.OrchestratorProfile.OrchestratorType = "Kubernetes"
+	properties.MasterProfile.Count = 1
+	properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = "kubenet"
+	setOrchestratorDefaults(&mockCS)
+
+	i = getAddonsIndexByName(properties.OrchestratorProfile.KubernetesConfig.Addons, AzureCNINetworkMonitoringAddonName)
+	if helpers.IsTrueBoolPointer(properties.OrchestratorProfile.KubernetesConfig.Addons[i].Enabled) {
+		t.Fatalf("Azure CNI networkmonitor addon should only be present in Azure CNI configurations")
+	}
+}
+
 func getMockAddon(name string) api.KubernetesAddon {
 	return api.KubernetesAddon{
 		Name:    name,
@@ -400,19 +602,25 @@ func getMockAddon(name string) api.KubernetesAddon {
 }
 
 func getMockBaseContainerService(orchestratorVersion string) api.ContainerService {
+	mockAPIProperties := getMockAPIProperties(orchestratorVersion)
 	return api.ContainerService{
-		Properties: &api.Properties{
-			OrchestratorProfile: &api.OrchestratorProfile{
-				OrchestratorVersion: orchestratorVersion,
-				KubernetesConfig:    &api.KubernetesConfig{},
-			},
-			MasterProfile: &api.MasterProfile{},
-			AgentPoolProfiles: []*api.AgentPoolProfile{
-				{},
-			},
-		},
+		Properties: &mockAPIProperties,
 	}
 }
+
+func getMockAPIProperties(orchestratorVersion string) api.Properties {
+	return api.Properties{
+		ProvisioningState: "",
+		OrchestratorProfile: &api.OrchestratorProfile{
+			OrchestratorVersion: orchestratorVersion,
+			KubernetesConfig:    &api.KubernetesConfig{},
+		},
+		MasterProfile: &api.MasterProfile{},
+		AgentPoolProfiles: []*api.AgentPoolProfile{
+			{},
+		}}
+}
+
 func getKubernetesConfigWithFeatureGates(featureGates string) *api.KubernetesConfig {
 	return &api.KubernetesConfig{
 		KubeletConfig: map[string]string{"--feature-gates": featureGates},

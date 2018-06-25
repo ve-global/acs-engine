@@ -1,22 +1,51 @@
     {
+{{if .AcceleratedNetworkingEnabled}}
+      "apiVersion": "[variables('apiVersionAcceleratedNetworking')]",
+{{else}}
       "apiVersion": "[variables('apiVersionDefault')]",
+{{end}}
       "copy": {
         "count": "[sub(variables('{{.Name}}Count'), variables('{{.Name}}Offset'))]",
         "name": "loop"
       },
       "dependsOn": [
+{{if not IsOpenShift}}
 {{if .IsCustomVNET}}
       "[variables('nsgID')]"
 {{else}}
       "[variables('vnetID')]"
 {{end}}
+{{else}}
+{{if .IsCustomVNET}}
+      "[concat(variables('masterVMNamePrefix'), 'nic-0')]",
+{{else}}
+      "[variables('vnetID')]",
+{{end}}
+{{if eq .Role "infra"}}
+      "[variables('routerLBName')]",
+      "[variables('routerNSGID')]"
+{{else}}
+      "[variables('nsgID')]"
+{{end}}
+{{end}}
       ],
       "location": "[variables('location')]",
       "name": "[concat(variables('{{.Name}}VMNamePrefix'), 'nic-', copyIndex(variables('{{.Name}}Offset')))]",
       "properties": {
+        "enableAcceleratedNetworking" : "{{.AcceleratedNetworkingEnabled}}",
+{{if not IsOpenShift}}
 {{if .IsCustomVNET}}
         "networkSecurityGroup": {
           "id": "[variables('nsgID')]"
+        },
+{{end}}
+{{else}}
+        "networkSecurityGroup": {
+          {{if eq .Role "infra"}}
+          "id": "[variables('routerNSGID')]"
+          {{else}}
+          "id": "[variables('nsgID')]"
+          {{end}}
         },
 {{end}}
         "ipConfigurations": [
@@ -35,7 +64,7 @@
               ,
               "loadBalancerBackendAddressPools": [
                 {
-                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'router-lb'), '/backendAddressPools/backend')]"
+                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('routerLBName')), '/backendAddressPools/backend')]"
                 }
               ]
 {{end}}
@@ -142,6 +171,7 @@
         "creationSource" : "[concat(variables('generatorCode'), '-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
         "resourceNameSuffix" : "[variables('nameSuffix')]",
         "orchestrator" : "[variables('orchestratorNameVersionTag')]",
+        "acsengineVersion" : "[variables('acsengineVersion')]",
         "poolName" : "{{.Name}}"
       },
       "location": "[variables('location')]",

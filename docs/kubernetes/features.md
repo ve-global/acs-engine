@@ -104,11 +104,11 @@ spec:
 
 ## Using Azure integrated networking (CNI)
 
-Kubernetes clusters are configured by default to use the [Azure CNI plugin](https://github.com/Azure/azure-container-networking) which provides an Azure native networking experience. Pods will receive IP addresses directly from the vnet subnet on which they're hosted. If the api model doesn't specify explicitly, acs-engine will automatically provide the following `networkPolicy` configuration in `kubernetesConfig`:
+Kubernetes clusters are configured by default to use the [Azure CNI plugin](https://github.com/Azure/azure-container-networking) which provides an Azure native networking experience. Pods will receive IP addresses directly from the vnet subnet on which they're hosted. If the api model doesn't specify explicitly, acs-engine will automatically provide the following `networkPlugin` configuration in `kubernetesConfig`:
 
 ```
       "kubernetesConfig": {
-        "networkPolicy": "azure"
+        "networkPlugin": "azure"
       }
 ```
 
@@ -204,7 +204,7 @@ you can define stricter policies. Good resources to get information about that a
 
 *Note: Custom VNET for Kubernetes Windows cluster has a [known issue](https://github.com/Azure/acs-engine/issues/1767).*
 
-ACS Engine supports deploying into an existing VNET. Operators must specify the ARM path/id of Subnets for the `masterProfile` and  any `agentPoolProfiles`, as well as the first IP address to use for IP static IP allocation in `firstConsecutiveStaticIP`. Additionally, to prevent source address NAT'ing within the VNET, we assign to the `vnetCidr` property in `masterProfile` the CIDR block that represents the usable address space in the existing VNET.
+ACS Engine supports deploying into an existing VNET. Operators must specify the ARM path/id of Subnets for the `masterProfile` and  any `agentPoolProfiles`, as well as the first IP address to use for static IP allocation in `firstConsecutiveStaticIP`. Please note that in any azure subnet, the first four and the last ip address is reserved and can not be used. Additionally, each pod now gets the IP address from the Subnet. As a result, enough IP addresses (equal to `ipAddressCount` for each node) should be available beyond `firstConsecutiveStaticIP`. By default, the `ipAddressCount` has a value of 31, 1 for the node and 30 for pods, (note that the number of pods can be changed via `KubeletConfig["--max-pods"]`). `ipAddressCount` can be changed if desired. Furthermore, to prevent source address NAT'ing within the VNET, we assign to the `vnetCidr` property in `masterProfile` the CIDR block that represents the usable address space in the existing VNET. Therefore, it is recommended to use a large subnet size such as `/16`.
 
 Depending upon the size of the VNET address space, during deployment, it is possible to experience IP address assignment collision between the required Kubernetes static IPs (one each per master and one for the API server load balancer, if more than one masters) and Azure CNI-assigned dynamic IPs (one for each NIC on the agent nodes). In practice, the larger the VNET the less likely this is to happen; some detail, and then a guideline.
 
@@ -242,7 +242,7 @@ Before provisioning, modify the `masterProfile` and `agentPoolProfiles` to match
 
 ### Kubenet Networking Custom VNET
 
-If you're not using Azure CNI (e.g., `"networkPolicy": "none"` in the `kubernetesConfig` api model configuration object): After a custom VNET-configured cluster finishes provisioning, fetch the id of the Route Table resource from `Microsoft.Network` provider in your new cluster's Resource Group.
+If you're *not* using Azure CNI (e.g., `"networkPlugin": "kubenet"` in the `kubernetesConfig` api model configuration object): After a custom VNET-configured cluster finishes provisioning, fetch the id of the Route Table resource from `Microsoft.Network` provider in your new cluster's Resource Group.
 
 The route table resource id is of the format: `/subscriptions/SUBSCRIPTIONID/resourceGroups/RESOURCEGROUPNAME/providers/Microsoft.Network/routeTables/ROUTETABLENAME`
 
@@ -289,11 +289,9 @@ container runtime by setting:
 ```
 
 You will need to make sure your agents are using a `vmSize` that [supports
-nested
-virtualization](https://azure.microsoft.com/en-us/blog/nested-virtualization-in-azure/).
+nested virtualization](https://azure.microsoft.com/en-us/blog/nested-virtualization-in-azure/).
 These are the `Dv3` or `Ev3` series nodes.
 
-You will also need to attach a disk to those nodes for the device-mapper disk that clear containers will use.
 This should look like:
 
 ```
@@ -303,7 +301,6 @@ This should look like:
         "count": 3,
         "vmSize": "Standard_D4s_v3",
         "availabilityProfile": "AvailabilitySet",
-        "storageProfile": "ManagedDisks",
         "diskSizesGB": [1023]
       }
     ],
@@ -340,7 +337,6 @@ To auto-provision a jumpbox with your acs-engine deployment use:
             "name": "my-jb",
             "vmSize": "Standard_D4s_v3",
             "osDiskSizeGB": 30,
-            "storageProfile": "ManagedDisks",
             "username": "azureuser",
             "publicKey": "xxx"
           }

@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/arm/resources/resources"
 	"github.com/Azure/go-autorest/autorest"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/api/core/v1"
 )
 
 // ACSEngineClient is the interface used to talk to an Azure environment.
@@ -44,6 +44,15 @@ type ACSEngineClient interface {
 	// ListVirtualMachineScaleSets lists the vmss resources in the resource group
 	ListVirtualMachineScaleSets(resourceGroup string) (compute.VirtualMachineScaleSetListResult, error)
 
+	// ListVirtualMachineScaleSetVMs lists the virtual machines contained in a vmss
+	ListVirtualMachineScaleSetVMs(resourceGroup, virtualMachineScaleSet string) (compute.VirtualMachineScaleSetVMListResult, error)
+
+	// DeleteVirtualMachineScaleSetVM deletes a VM in a VMSS
+	DeleteVirtualMachineScaleSetVM(resourceGroup, virtualMachineScaleSet, instanceID string, cancel <-chan struct{}) (<-chan compute.OperationStatusResponse, <-chan error)
+
+	// SetVirtualMachineScaleSetCapacity sets the VMSS capacity
+	SetVirtualMachineScaleSetCapacity(resourceGroup, virtualMachineScaleSet string, sku compute.Sku, location string, cancel <-chan struct{}) (<-chan compute.VirtualMachineScaleSet, <-chan error)
+
 	//
 	// STORAGE
 
@@ -65,11 +74,13 @@ type ACSEngineClient interface {
 
 	// CreateGraphPrincipal creates a service principal via the graphrbac client
 	CreateGraphPrincipal(servicePrincipalCreateParameters graphrbac.ServicePrincipalCreateParameters) (graphrbac.ServicePrincipal, error)
-	CreateApp(applicationName, applicationURL string) (applicationID, servicePrincipalObjectID, secret string, err error)
+	CreateApp(applicationName, applicationURL string, replyURLs *[]string, requiredResourceAccess *[]graphrbac.RequiredResourceAccess) (applicationID, servicePrincipalObjectID, secret string, err error)
 
 	// RBAC
 	CreateRoleAssignment(scope string, roleAssignmentName string, parameters authorization.RoleAssignmentCreateParameters) (authorization.RoleAssignment, error)
 	CreateRoleAssignmentSimple(applicationID, roleID string) error
+	DeleteRoleAssignmentByID(roleAssignmentNameID string) (authorization.RoleAssignment, error)
+	ListRoleAssignmentsForPrincipal(scope string, principalID string) (authorization.RoleAssignmentListResult, error)
 
 	// MANAGED DISKS
 	DeleteManagedDisk(resourceGroupName string, diskName string, cancel <-chan struct{}) (<-chan disk.OperationStatusResponse, <-chan error)

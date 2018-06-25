@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -30,6 +32,11 @@ type Config struct {
 	OutputDirectory       string `envconfig:"OUTPUT_DIR" default:"_output"`
 	CreateVNET            bool   `envconfig:"CREATE_VNET" default:"false"`
 	EnableKMSEncryption   bool   `envconfig:"ENABLE_KMS_ENCRYPTION" default:"false"`
+	Distro                string `envconfig:"DISTRO"`
+	SubscriptionID        string `envconfig:"SUBSCRIPTION_ID"`
+	TenantID              string `envconfig:"TENANT_ID"`
+	ImageName             string `envconfig:"IMAGE_NAME"`
+	ImageResourceGroup    string `envconfig:"IMAGE_RESOURCE_GROUP"`
 
 	ClusterDefinitionPath     string // The original template we want to use to build the cluster from.
 	ClusterDefinitionTemplate string // This is the template after we splice in the environment variables
@@ -85,12 +92,49 @@ func Build(cfg *config.Config, subnetID string) (*Engine, error) {
 			Secret:   config.ClientSecret,
 		}
 	}
+	if cfg.IsOpenShift() {
+		// azProfile
+		cs.ContainerService.Properties.AzProfile = &vlabs.AzProfile{
+			TenantID:       config.TenantID,
+			SubscriptionID: config.SubscriptionID,
+			ResourceGroup:  cfg.Name,
+			Location:       cfg.Location,
+		}
+		// openshiftConfig
+		pass, err := generateRandomString(32)
+		if err != nil {
+			return nil, err
+		}
+		cs.ContainerService.Properties.OrchestratorProfile.OpenShiftConfig = &vlabs.OpenShiftConfig{
+			ClusterUsername: "test-user",
+			ClusterPassword: pass,
+		}
+		// master and agent config
+		cs.ContainerService.Properties.MasterProfile.Distro = vlabs.Distro(config.Distro)
+		cs.ContainerService.Properties.MasterProfile.ImageRef = nil
+		if config.ImageName != "" && config.ImageResourceGroup != "" {
+			cs.ContainerService.Properties.MasterProfile.ImageRef = &vlabs.ImageReference{
+				Name:          config.ImageName,
+				ResourceGroup: config.ImageResourceGroup,
+			}
+		}
+		for i := range cs.ContainerService.Properties.AgentPoolProfiles {
+			cs.ContainerService.Properties.AgentPoolProfiles[i].Distro = vlabs.Distro(config.Distro)
+			cs.ContainerService.Properties.AgentPoolProfiles[i].ImageRef = nil
+			if config.ImageName != "" && config.ImageResourceGroup != "" {
+				cs.ContainerService.Properties.AgentPoolProfiles[i].ImageRef = &vlabs.ImageReference{
+					Name:          config.ImageName,
+					ResourceGroup: config.ImageResourceGroup,
+				}
+			}
+		}
+	}
 
 	if config.MasterDNSPrefix != "" {
 		cs.ContainerService.Properties.MasterProfile.DNSPrefix = config.MasterDNSPrefix
 	}
 
-	if !cfg.IsKubernetes() && config.AgentDNSPrefix != "" {
+	if !cfg.IsKubernetes() && !cfg.IsOpenShift() && config.AgentDNSPrefix != "" {
 		for idx, pool := range cs.ContainerService.Properties.AgentPoolProfiles {
 			pool.DNSPrefix = fmt.Sprintf("%v-%v", config.AgentDNSPrefix, idx)
 		}
@@ -189,6 +233,15 @@ func (e *Engine) HasAddon(name string) (bool, api.KubernetesAddon) {
 	return false, api.KubernetesAddon{}
 }
 
+// HasNetworkPolicy will return true if the specified network policy is enabled
+func (e *Engine) HasNetworkPolicy(name string) bool {
+	if strings.Contains(e.ExpandedDefinition.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy, name) {
+		return true
+	}
+
+	return false
+}
+
 // Write will write the cluster definition to disk
 func (e *Engine) Write() error {
 	json, err := helpers.JSONMarshal(e.ClusterDefinition, false)
@@ -235,4 +288,18 @@ func ParseOutput(path string) (*api.ContainerService, error) {
 		return nil, err
 	}
 	return containerService, nil
+}
+
+func generateRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func generateRandomString(s int) (string, error) {
+	b, err := generateRandomBytes(s)
+	return base64.URLEncoding.EncodeToString(b), err
 }

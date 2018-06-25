@@ -21,7 +21,7 @@ func init() {
 }
 
 // Validate implements APIObject
-func (o *OrchestratorProfile) Validate(isUpdate bool) error {
+func (o *OrchestratorProfile) Validate(isUpdate, hasWindows bool) error {
 	// Don't need to call validate.Struct(o)
 	// It is handled by Properties.Validate()
 	// On updates we only need to make sure there is a supported patch version for the minor version
@@ -51,7 +51,7 @@ func (o *OrchestratorProfile) Validate(isUpdate bool) error {
 	} else {
 		switch o.OrchestratorType {
 		case DCOS, Kubernetes:
-			patchVersion := common.GetValidPatchVersion(o.OrchestratorType, o.OrchestratorVersion)
+			patchVersion := common.GetValidPatchVersion(o.OrchestratorType, o.OrchestratorVersion, hasWindows)
 			// if there isn't a supported patch version for this version fail
 			if patchVersion == "" {
 				return fmt.Errorf("OrchestratorProfile has unknown orchestrator version: %s", o.OrchestratorVersion)
@@ -66,7 +66,7 @@ func (o *OrchestratorProfile) Validate(isUpdate bool) error {
 func (m *MasterProfile) Validate() error {
 	// Don't need to call validate.Struct(m)
 	// It is handled by Properties.Validate()
-	return validateDNSName(m.DNSPrefix)
+	return common.ValidateDNSPrefix(m.DNSPrefix)
 }
 
 // Validate implements APIObject
@@ -89,7 +89,7 @@ func (a *AgentPoolProfile) Validate(orchestratorType string) error {
 		}
 	}
 	if a.DNSPrefix != "" {
-		if e := validateDNSName(a.DNSPrefix); e != nil {
+		if e := common.ValidateDNSPrefix(a.DNSPrefix); e != nil {
 			return e
 		}
 		if len(a.Ports) > 0 {
@@ -129,7 +129,7 @@ func (a *Properties) Validate(isUpdate bool) error {
 	if e := validate.Struct(a); e != nil {
 		return handleValidationErrors(e.(validator.ValidationErrors))
 	}
-	if e := a.OrchestratorProfile.Validate(isUpdate); e != nil {
+	if e := a.OrchestratorProfile.Validate(isUpdate, a.HasWindows()); e != nil {
 		return e
 	}
 	if e := a.MasterProfile.Validate(); e != nil {
@@ -192,10 +192,7 @@ func (a *Properties) Validate(isUpdate bool) error {
 	if e := a.LinuxProfile.Validate(); e != nil {
 		return e
 	}
-	if e := validateVNET(a); e != nil {
-		return e
-	}
-	return nil
+	return validateVNET(a)
 }
 
 func validatePoolName(poolName string) error {
@@ -208,18 +205,6 @@ func validatePoolName(poolName string) error {
 	submatches := re.FindStringSubmatch(poolName)
 	if len(submatches) != 2 {
 		return fmt.Errorf("pool name '%s' is invalid. A pool name must start with a lowercase letter, have max length of 12, and only have characters a-z0-9", poolName)
-	}
-	return nil
-}
-
-func validateDNSName(dnsName string) error {
-	dnsNameRegex := `^([A-Za-z][A-Za-z0-9-]{1,43}[A-Za-z0-9])$`
-	re, err := regexp.Compile(dnsNameRegex)
-	if err != nil {
-		return err
-	}
-	if !re.MatchString(dnsName) {
-		return fmt.Errorf("DNS name '%s' is invalid. The DNS name must contain between 3 and 45 characters.  The name can contain only letters, numbers, and hyphens.  The name must start with a letter and must end with a letter or a number. (length was %d)", dnsName, len(dnsName))
 	}
 	return nil
 }
@@ -254,13 +239,13 @@ func validateVNET(a *Properties) error {
 		}
 	}
 	if isCustomVNET {
-		subscription, resourcegroup, vnetname, _, e := GetVNETSubnetIDComponents(a.MasterProfile.VnetSubnetID)
+		subscription, resourcegroup, vnetname, _, e := common.GetVNETSubnetIDComponents(a.MasterProfile.VnetSubnetID)
 		if e != nil {
 			return e
 		}
 
 		for _, agentPool := range a.AgentPoolProfiles {
-			agentSubID, agentRG, agentVNET, _, err := GetVNETSubnetIDComponents(agentPool.VnetSubnetID)
+			agentSubID, agentRG, agentVNET, _, err := common.GetVNETSubnetIDComponents(agentPool.VnetSubnetID)
 			if err != nil {
 				return err
 			}
@@ -277,18 +262,4 @@ func validateVNET(a *Properties) error {
 		}
 	}
 	return nil
-}
-
-// GetVNETSubnetIDComponents extract subscription, resourcegroup, vnetname, subnetname from the vnetSubnetID
-func GetVNETSubnetIDComponents(vnetSubnetID string) (string, string, string, string, error) {
-	vnetSubnetIDRegex := `^\/subscriptions\/([^\/]*)\/resourceGroups\/([^\/]*)\/providers\/Microsoft.Network\/virtualNetworks\/([^\/]*)\/subnets\/([^\/]*)$`
-	re, err := regexp.Compile(vnetSubnetIDRegex)
-	if err != nil {
-		return "", "", "", "", err
-	}
-	submatches := re.FindStringSubmatch(vnetSubnetID)
-	if len(submatches) != 4 {
-		return "", "", "", "", err
-	}
-	return submatches[1], submatches[2], submatches[3], submatches[4], nil
 }

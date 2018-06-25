@@ -10,7 +10,9 @@ import (
 	"github.com/Azure/acs-engine/pkg/armhelpers"
 	"github.com/Azure/acs-engine/pkg/armhelpers/utils"
 	"github.com/Azure/acs-engine/pkg/i18n"
+	"github.com/Azure/acs-engine/pkg/operations"
 	"github.com/sirupsen/logrus"
+	"k8s.io/api/core/v1"
 )
 
 // Upgrader holds information on upgrading an ACS cluster
@@ -18,9 +20,10 @@ type Upgrader struct {
 	Translator *i18n.Translator
 	logger     *logrus.Entry
 	ClusterTopology
-	Client      armhelpers.ACSEngineClient
-	kubeConfig  string
-	stepTimeout *time.Duration
+	Client           armhelpers.ACSEngineClient
+	kubeConfig       string
+	stepTimeout      *time.Duration
+	ACSEngineVersion string
 }
 
 type vmStatus int
@@ -38,13 +41,14 @@ type vmInfo struct {
 }
 
 // Init initializes an upgrader struct
-func (ku *Upgrader) Init(translator *i18n.Translator, logger *logrus.Entry, clusterTopology ClusterTopology, client armhelpers.ACSEngineClient, kubeConfig string, stepTimeout *time.Duration) {
+func (ku *Upgrader) Init(translator *i18n.Translator, logger *logrus.Entry, clusterTopology ClusterTopology, client armhelpers.ACSEngineClient, kubeConfig string, stepTimeout *time.Duration, acsEngineVersion string) {
 	ku.Translator = translator
 	ku.logger = logger
 	ku.ClusterTopology = clusterTopology
 	ku.Client = client
 	ku.kubeConfig = kubeConfig
 	ku.stepTimeout = stepTimeout
+	ku.ACSEngineVersion = acsEngineVersion
 }
 
 // RunUpgrade runs the upgrade pipeline
@@ -53,11 +57,11 @@ func (ku *Upgrader) RunUpgrade() error {
 		return err
 	}
 
-	if err := ku.upgradeAgentPools(); err != nil {
+	if err := ku.upgradeAgentScaleSets(); err != nil {
 		return err
 	}
 
-	return nil
+	return ku.upgradeAgentPools()
 }
 
 // Validate will run validation post upgrade
@@ -71,7 +75,7 @@ func (ku *Upgrader) upgradeMasterNodes() error {
 	}
 	ku.logger.Infof("Master nodes StorageProfile: %s", ku.ClusterTopology.DataModel.Properties.MasterProfile.StorageProfile)
 	// Upgrade Master VMs
-	templateMap, parametersMap, err := ku.generateUpgradeTemplate(ku.ClusterTopology.DataModel)
+	templateMap, parametersMap, err := ku.generateUpgradeTemplate(ku.ClusterTopology.DataModel, ku.ACSEngineVersion)
 	if err != nil {
 		return ku.Translator.Errorf("error generating upgrade template: %s", err.Error())
 	}
@@ -94,6 +98,7 @@ func (ku *Upgrader) upgradeMasterNodes() error {
 	upgradeMasterNode.ParametersMap = parametersMap
 	upgradeMasterNode.UpgradeContainerService = ku.ClusterTopology.DataModel
 	upgradeMasterNode.ResourceGroup = ku.ClusterTopology.ResourceGroup
+	upgradeMasterNode.SubscriptionID = ku.ClusterTopology.SubscriptionID
 	upgradeMasterNode.Client = ku.Client
 	upgradeMasterNode.kubeConfig = ku.kubeConfig
 	if ku.stepTimeout == nil {
@@ -194,7 +199,7 @@ func (ku *Upgrader) upgradeMasterNodes() error {
 func (ku *Upgrader) upgradeAgentPools() error {
 	for _, agentPool := range ku.ClusterTopology.AgentPools {
 		// Upgrade Agent VMs
-		templateMap, parametersMap, err := ku.generateUpgradeTemplate(ku.ClusterTopology.DataModel)
+		templateMap, parametersMap, err := ku.generateUpgradeTemplate(ku.ClusterTopology.DataModel, ku.ACSEngineVersion)
 		if err != nil {
 			ku.logger.Errorf("Error generating upgrade template: %v", err)
 			return ku.Translator.Errorf("Error generating upgrade template: %s", err.Error())
@@ -240,6 +245,7 @@ func (ku *Upgrader) upgradeAgentPools() error {
 		upgradeAgentNode.TemplateMap = templateMap
 		upgradeAgentNode.ParametersMap = parametersMap
 		upgradeAgentNode.UpgradeContainerService = ku.ClusterTopology.DataModel
+		upgradeAgentNode.SubscriptionID = ku.ClusterTopology.SubscriptionID
 		upgradeAgentNode.ResourceGroup = ku.ClusterTopology.ResourceGroup
 		upgradeAgentNode.Client = ku.Client
 		upgradeAgentNode.kubeConfig = ku.kubeConfig
@@ -373,7 +379,114 @@ func (ku *Upgrader) upgradeAgentPools() error {
 	return nil
 }
 
-func (ku *Upgrader) generateUpgradeTemplate(upgradeContainerService *api.ContainerService) (map[string]interface{}, map[string]interface{}, error) {
+func (ku *Upgrader) upgradeAgentScaleSets() error {
+	for _, vmssToUpgrade := range ku.ClusterTopology.AgentPoolScaleSetsToUpgrade {
+		ku.logger.Infof("Upgrading VMSS %s", vmssToUpgrade.Name)
+
+		if len(vmssToUpgrade.VMsToUpgrade) == 0 {
+			ku.logger.Infof("No VMs to upgrade for VMSS %s, skipping", vmssToUpgrade.Name)
+			continue
+		}
+
+		newCapacity := *vmssToUpgrade.Sku.Capacity + 1
+		ku.logger.Infof(
+			"VMSS %s current capacity is %d and new capacity will be %d while each node is swapped",
+			vmssToUpgrade.Name,
+			*vmssToUpgrade.Sku.Capacity,
+			newCapacity,
+		)
+
+		*vmssToUpgrade.Sku.Capacity = newCapacity
+
+		for _, vmToUpgrade := range vmssToUpgrade.VMsToUpgrade {
+			success, failure := ku.Client.SetVirtualMachineScaleSetCapacity(
+				ku.ClusterTopology.ResourceGroup,
+				vmssToUpgrade.Name,
+				vmssToUpgrade.Sku,
+				vmssToUpgrade.Location,
+				make(chan struct{}),
+			)
+
+			select {
+			case <-success:
+				ku.logger.Infof("Successfully set capacity for VMSS %s", vmssToUpgrade.Name)
+			case err := <-failure:
+				ku.logger.Errorf("Failure to set capacity for VMSS %s", vmssToUpgrade.Name)
+				return err
+			}
+
+			// Before we can delete the node we should safely and responsibly drain it
+			var kubeAPIServerURL string
+			getClientTimeout := 10 * time.Second
+
+			if ku.DataModel.Properties.HostedMasterProfile != nil {
+				kubeAPIServerURL = ku.DataModel.Properties.HostedMasterProfile.FQDN
+			} else {
+				kubeAPIServerURL = ku.DataModel.Properties.MasterProfile.FQDN
+			}
+			client, err := ku.Client.GetKubernetesClient(
+				kubeAPIServerURL,
+				ku.kubeConfig,
+				interval,
+				getClientTimeout,
+			)
+			if err != nil {
+				ku.logger.Errorf("Error getting Kubernetes client: %v", err)
+				return err
+			}
+
+			ku.logger.Infof("Draining node %s", vmToUpgrade.Name)
+			err = operations.SafelyDrainNodeWithClient(
+				client,
+				ku.logger,
+				vmToUpgrade.Name,
+				time.Minute,
+			)
+			if err != nil {
+				ku.logger.Errorf("Error draining VM in VMSS: %v", err)
+				return err
+			}
+
+			ku.logger.Infof(
+				"Deleting VM %s in VMSS %s",
+				vmToUpgrade.Name,
+				vmssToUpgrade.Name,
+			)
+
+			// At this point we have our buffer node that will replace the node to delete
+			// so we can just remove this current node then
+			res, failure := ku.Client.DeleteVirtualMachineScaleSetVM(
+				ku.ClusterTopology.ResourceGroup,
+				vmssToUpgrade.Name,
+				vmToUpgrade.InstanceID,
+				make(chan struct{}),
+			)
+
+			select {
+			case <-res:
+				ku.logger.Infof(
+					"Successfully deleted VM %s in VMSS %s",
+					vmToUpgrade.Name,
+					vmssToUpgrade.Name,
+				)
+			case err := <-failure:
+				ku.logger.Errorf(
+					"Failed to delete VM %s in VMSS %s",
+					vmToUpgrade.Name,
+					vmssToUpgrade,
+				)
+				return err
+			}
+		}
+		ku.logger.Infof("Completed upgrading VMSS %s", vmssToUpgrade)
+	}
+
+	ku.logger.Infoln("Completed upgrading all VMSS")
+
+	return nil
+}
+
+func (ku *Upgrader) generateUpgradeTemplate(upgradeContainerService *api.ContainerService, acsengineVersion string) (map[string]interface{}, map[string]interface{}, error) {
 	var err error
 	ctx := acsengine.Context{
 		Translator: ku.Translator,
@@ -385,7 +498,7 @@ func (ku *Upgrader) generateUpgradeTemplate(upgradeContainerService *api.Contain
 
 	var templateJSON string
 	var parametersJSON string
-	if templateJSON, parametersJSON, _, err = templateGenerator.GenerateTemplate(upgradeContainerService, acsengine.DefaultGeneratorCode, true); err != nil {
+	if templateJSON, parametersJSON, _, err = templateGenerator.GenerateTemplate(upgradeContainerService, acsengine.DefaultGeneratorCode, true, acsengineVersion); err != nil {
 		return nil, nil, ku.Translator.Errorf("error generating upgrade template: %s", err.Error())
 	}
 
@@ -416,4 +529,15 @@ func getAvailableIndex(vms map[int]*vmInfo) int {
 	}
 
 	return maxIndex + 1
+}
+
+// isNodeReady returns true if a node is ready; false otherwise.
+// Copied from: https://github.com/kubernetes/kubernetes/blob/886e04f1fffbb04faf8a9f9ee141143b2684ae68/pkg/api/v1/node/util.go#L40
+func isNodeReady(node *v1.Node) bool {
+	for _, c := range node.Status.Conditions {
+		if c.Type == v1.NodeReady {
+			return c.Status == v1.ConditionTrue
+		}
+	}
+	return false
 }

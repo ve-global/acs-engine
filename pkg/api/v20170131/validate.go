@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+
+	"github.com/Azure/acs-engine/pkg/api/common"
 )
 
 // Validate implements APIObject
@@ -29,10 +31,7 @@ func (m *MasterProfile) Validate() error {
 	if e := validateName(m.DNSPrefix, "MasterProfile.DNSPrefix"); e != nil {
 		return e
 	}
-	if e := validateDNSName(m.DNSPrefix); e != nil {
-		return e
-	}
-	return nil
+	return common.ValidateDNSPrefix(m.DNSPrefix)
 }
 
 // Validate implements APIObject
@@ -57,7 +56,7 @@ func (a *AgentPoolProfile) Validate(orchestratorType string) error {
 		}
 	}
 	if a.DNSPrefix != "" {
-		if e := validateDNSName(a.DNSPrefix); e != nil {
+		if e := common.ValidateDNSPrefix(a.DNSPrefix); e != nil {
 			return e
 		}
 	}
@@ -72,10 +71,7 @@ func (l *LinuxProfile) Validate() error {
 	if len(l.SSH.PublicKeys) != 1 {
 		return errors.New("LinuxProfile.PublicKeys requires only 1 SSH Key")
 	}
-	if e := validateName(l.SSH.PublicKeys[0].KeyData, "LinuxProfile.PublicKeys.KeyData"); e != nil {
-		return e
-	}
-	return nil
+	return validateName(l.SSH.PublicKeys[0].KeyData, "LinuxProfile.PublicKeys.KeyData")
 }
 
 // Validate implements APIObject
@@ -132,10 +128,7 @@ func (a *Properties) Validate() error {
 	if e := a.LinuxProfile.Validate(); e != nil {
 		return e
 	}
-	if e := a.OrchestratorProfile.Validate(); e != nil {
-		return e
-	}
-	return nil
+	return a.OrchestratorProfile.Validate()
 }
 
 func validateNameEmpty(name string, label string) error {
@@ -162,18 +155,6 @@ func validatePoolName(poolName string) error {
 	submatches := re.FindStringSubmatch(poolName)
 	if len(submatches) != 2 {
 		return fmt.Errorf("pool name '%s' is invalid. A pool name must start with a lowercase letter, have max length of 12, and only have characters a-z0-9", poolName)
-	}
-	return nil
-}
-
-func validateDNSName(dnsName string) error {
-	dnsNameRegex := `^([A-Za-z][A-Za-z0-9-]{1,43}[A-Za-z0-9])$`
-	re, err := regexp.Compile(dnsNameRegex)
-	if err != nil {
-		return err
-	}
-	if !re.MatchString(dnsName) {
-		return fmt.Errorf("DNS name '%s' is invalid. The DNS name must contain between 3 and 45 characters.  The name can contain only letters, numbers, and hyphens.  The name must start with a letter and must end with a letter or a number. (length was %d)", dnsName, len(dnsName))
 	}
 	return nil
 }

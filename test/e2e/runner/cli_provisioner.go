@@ -3,6 +3,7 @@ package runner
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kelseyhightower/envconfig"
 
 	"github.com/Azure/acs-engine/pkg/helpers"
 	"github.com/Azure/acs-engine/test/e2e/azure"
@@ -19,8 +22,8 @@ import (
 	"github.com/Azure/acs-engine/test/e2e/kubernetes/node"
 	"github.com/Azure/acs-engine/test/e2e/kubernetes/util"
 	"github.com/Azure/acs-engine/test/e2e/metrics"
+	onode "github.com/Azure/acs-engine/test/e2e/openshift/node"
 	"github.com/Azure/acs-engine/test/e2e/remote"
-	"github.com/kelseyhightower/envconfig"
 )
 
 // CLIProvisioner holds the configuration needed to provision a clusters
@@ -146,6 +149,12 @@ func (cli *CLIProvisioner) provision() error {
 	}
 	cli.Engine.ExpandedDefinition = csGenerated
 
+	// Both Openshift and Kubernetes deployments should have a kubeconfig available
+	// at this point.
+	if (cli.Config.IsKubernetes() || cli.Config.IsOpenShift()) && !cli.IsPrivate() {
+		cli.Config.SetKubeConfig()
+	}
+
 	// Lets start by just using the normal az group deployment cli for creating a cluster
 	err = cli.Account.CreateDeployment(cli.Config.Name, eng)
 	if err != nil {
@@ -180,26 +189,31 @@ func (cli *CLIProvisioner) generateName() string {
 }
 
 func (cli *CLIProvisioner) waitForNodes() error {
-	if cli.Config.IsKubernetes() {
+	if cli.Config.IsKubernetes() || cli.Config.IsOpenShift() {
 		if !cli.IsPrivate() {
-			cli.Config.SetKubeConfig()
 			log.Println("Waiting on nodes to go into ready state...")
 			ready := node.WaitOnReady(cli.Engine.NodeCount(), 10*time.Second, cli.Config.Timeout)
 			if !ready {
 				return errors.New("Error: Not all nodes in a healthy state")
 			}
-			version, err := node.Version()
+			var version string
+			var err error
+			if cli.Config.IsKubernetes() {
+				version, err = node.Version()
+			} else if cli.Config.IsOpenShift() {
+				version, err = onode.Version()
+			}
 			if err != nil {
 				log.Printf("Ready nodes did not return a version: %s", err)
 			}
-			log.Printf("Testing a Kubernetes %s cluster...\n", version)
+			log.Printf("Testing a %s %s cluster...\n", cli.Config.Orchestrator, version)
 		} else {
 			log.Println("This cluster is private")
 			if cli.Engine.ClusterDefinition.Properties.OrchestratorProfile.KubernetesConfig.PrivateCluster.JumpboxProfile == nil {
 				// TODO: add "bring your own jumpbox to e2e"
 				return errors.New("Error: cannot test a private cluster without provisioning a jumpbox")
 			}
-			log.Printf("Testing a Kubernetes private cluster...")
+			log.Printf("Testing a %s private cluster...", cli.Config.Orchestrator)
 			// TODO: create SSH connection and get nodes and k8s version
 		}
 	}
@@ -231,11 +245,18 @@ func (cli *CLIProvisioner) FetchProvisioningMetrics(path string, cfg *config.Con
 	agentFiles := []string{"/var/log/azure/cluster-provision.log", "/var/log/cloud-init.log",
 		"/var/log/cloud-init-output.log", "/var/log/syslog", "/var/log/azure/custom-script/handler.log",
 		"/opt/m", "/opt/azure/containers/kubelet.sh", "/opt/azure/containers/provision.sh",
-		"/opt/azure/provision-ps.log", "/var/log/azure/kubelet-status.log", "/var/log/azure/hyperkube-extract-status.log",
+		"/opt/azure/provision-ps.log", "/var/log/azure/kubelet-status.log",
 		"/var/log/azure/docker-status.log", "/var/log/azure/systemd-journald-status.log"}
 	masterFiles := agentFiles
 	masterFiles = append(masterFiles, "/opt/azure/containers/mountetcd.sh", "/opt/azure/containers/setup-etcd.sh", "/opt/azure/containers/setup-etcd.log")
 	hostname := fmt.Sprintf("%s.%s.cloudapp.azure.com", cli.Config.Name, cli.Config.Location)
+	cmd := exec.Command("ssh-agent", "-s")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Error while trying to start ssh agent:%s\nOutput:%s", err, out)
+	}
+	authSock := strings.Split(strings.Split(string(out), "=")[1], ";")
+	os.Setenv("SSH_AUTH_SOCK", authSock[0])
 	conn, err := remote.NewConnection(hostname, "22", cli.Engine.ClusterDefinition.Properties.LinuxProfile.AdminUsername, cli.Config.GetSSHKeyPath())
 	if err != nil {
 		return err
@@ -259,9 +280,9 @@ func (cli *CLIProvisioner) FetchProvisioningMetrics(path string, cfg *config.Con
 	}
 	connectString := fmt.Sprintf("%s@%s:/tmp/k8s-*", conn.User, hostname)
 	logsPath := filepath.Join(cfg.CurrentWorkingDir, "_logs", hostname)
-	cmd := exec.Command("scp", "-i", conn.PrivateKeyPath, "-o", "ConnectTimeout=30", "-o", "StrictHostKeyChecking=no", connectString, logsPath)
+	cmd = exec.Command("scp", "-i", conn.PrivateKeyPath, "-o", "ConnectTimeout=30", "-o", "StrictHostKeyChecking=no", connectString, logsPath)
 	util.PrintCommand(cmd)
-	out, err := cmd.CombinedOutput()
+	out, err = cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("Error output:%s\n", out)
 		return err
@@ -272,8 +293,22 @@ func (cli *CLIProvisioner) FetchProvisioningMetrics(path string, cfg *config.Con
 
 // IsPrivate will return true if the cluster has no public IPs
 func (cli *CLIProvisioner) IsPrivate() bool {
-	if cli.Config.IsKubernetes() && cli.Engine.ExpandedDefinition.Properties.OrchestratorProfile.KubernetesConfig.PrivateCluster != nil && helpers.IsTrueBoolPointer(cli.Engine.ExpandedDefinition.Properties.OrchestratorProfile.KubernetesConfig.PrivateCluster.Enabled) {
-		return true
+	return (cli.Config.IsKubernetes() || cli.Config.IsOpenShift()) &&
+		cli.Engine.ExpandedDefinition.Properties.OrchestratorProfile.KubernetesConfig.PrivateCluster != nil &&
+		helpers.IsTrueBoolPointer(cli.Engine.ExpandedDefinition.Properties.OrchestratorProfile.KubernetesConfig.PrivateCluster.Enabled)
+}
+
+// FetchActivityLog gets the activity log for the all resource groups used in the provisioner.
+func (cli *CLIProvisioner) FetchActivityLog(acct *azure.Account, logPath string) error {
+	for _, rg := range cli.ResourceGroups {
+		log, err := acct.FetchActivityLog(rg)
+		if err != nil {
+			return fmt.Errorf("cannot fetch activity log for resource group %s: %v", rg, err)
+		}
+		path := filepath.Join(logPath, fmt.Sprintf("activity-log-%s", rg))
+		if err := ioutil.WriteFile(path, []byte(log), 0644); err != nil {
+			return fmt.Errorf("cannot write activity log in file: %v", err)
+		}
 	}
-	return false
+	return nil
 }

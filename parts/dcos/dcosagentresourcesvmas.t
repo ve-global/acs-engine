@@ -175,10 +175,16 @@
 {{end}}
         "[concat('Microsoft.Network/networkInterfaces/', variables('{{.Name}}VMNamePrefix'), 'nic-', copyIndex(variables('{{.Name}}Offset')))]",
         "[concat('Microsoft.Compute/availabilitySets/', variables('{{.Name}}AvailabilitySet'))]"
+{{if and HasBootstrap (not IsHostedBootstrap)}}
+       ,"[concat('Microsoft.Compute/virtualMachines/', variables('bootstrapVMName'), /extensions/bootstrapready')]"
+{{end}}
       ],
       "tags":
       {
-        "creationSource" : "[concat('acsengine-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]"
+        "creationSource" : "[concat('acsengine-', variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
+        "orchestratorName": "dcos",
+        "orchestratorVersion": "[variables('orchestratorVersion')]",
+        "orchestratorNode": "agent"
       },
       "location": "[variables('location')]",
       "name": "[concat(variables('{{.Name}}VMNamePrefix'), copyIndex(variables('{{.Name}}Offset')))]",
